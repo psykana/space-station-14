@@ -33,6 +33,9 @@ public sealed partial class GenericCounterAlertComponent : Component
     /// Used to calculate offsets.
     /// </summary>
     [DataField]
+    public bool HideLeadingZeroes = true;
+
+    [DataField]
     public Vector2i AlertSize = new(32, 32);
 
     /// <summary>
