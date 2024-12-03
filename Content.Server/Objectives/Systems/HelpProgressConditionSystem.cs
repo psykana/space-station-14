@@ -50,6 +50,21 @@ public sealed class HelpProgressConditionSystem : EntitySystem
             .ToHashSet();
         var removeList = new List<EntityUid>();
 
+        // Can't help the same person multiple times
+        foreach (var objective in args.Mind.Objectives)
+        {
+            if (HasComp<RandomTraitorAliveComponent>(objective) || HasComp<RandomTraitorProgressComponent>(objective))
+            {
+                if (TryComp<TargetObjectiveComponent>(objective, out var help))
+                {
+                    if (help.Target != null)
+                    {
+                        removeList.Add(help.Target.Value);
+                    }
+                }
+            }
+        }
+
         // cant help anyone who is tasked with helping:
         // 1. thats boring
         // 2. no cyclic progress dependencies!!!

@@ -44,7 +44,30 @@ public sealed class KeepAliveConditionSystem : EntitySystem
             return;
         }
 
-        var traitors = Enumerable.ToList<(EntityUid Id, MindComponent Mind)>(_traitorRule.GetOtherTraitorMindsAliveAndConnected(args.Mind));
+        var traitors = _traitorRule.GetOtherTraitorMindsAliveAndConnected(args.Mind)
+            .Select(pair => pair.Item1)
+            .ToHashSet();
+        var removeList = new List<EntityUid>();
+
+        // Can't help the same person multiple times
+        foreach (var objective in args.Mind.Objectives)
+        {
+            if (HasComp<RandomTraitorAliveComponent>(objective) || HasComp<RandomTraitorProgressComponent>(objective))
+            {
+                if (TryComp<TargetObjectiveComponent>(objective, out var help))
+                {
+                    if (help.Target != null)
+                    {
+                        removeList.Add(help.Target.Value);
+                    }
+                }
+            }
+        }
+
+        foreach (var tot in removeList)
+        {
+            traitors.Remove(tot);
+        }
 
         // You are the first/only traitor.
         if (traitors.Count == 0)
@@ -53,7 +76,7 @@ public sealed class KeepAliveConditionSystem : EntitySystem
             return;
         }
 
-        _target.SetTarget(uid, _random.Pick(traitors).Id, target);
+        _target.SetTarget(uid, _random.Pick(traitors), target);
     }
 
     private float GetProgress(EntityUid target)
