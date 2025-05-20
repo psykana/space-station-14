@@ -1,4 +1,5 @@
-﻿using Content.Shared.Ghost.Roles.Raffles;
+using Content.Shared.Ghost.Roles.Raffles;
+using Robust.Shared.Audio;
 using Robust.Shared.Prototypes;
 
 namespace Content.Server.Ghost.Roles.Raffles;
@@ -32,4 +33,11 @@ public sealed partial class GhostRoleRaffleConfig
     /// </summary>
     [DataField("decider")]
     public ProtoId<GhostRoleRaffleDeciderPrototype> Decider { get; set; } = "default";
+
+    /// <summary>
+    /// The sound that plays for all ghosts when raffle spawns.
+    /// </summary>
+    [DataField("announceSound")]
+    [ViewVariables(VVAccess.ReadOnly)]
+    public SoundSpecifier? AnnounceSound = default;
 }

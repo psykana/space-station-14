@@ -7,6 +7,7 @@
   - type: GhostRole
     raffle:
       settings: default
+      announceSound: /Audio/Effects/voteding.ogg
   - type: GhostRoleAntagSpawner
 
 - type: entity
@@ -184,6 +185,7 @@
     - MindRoleGhostRoleSoloAntagonist
     raffle:
       settings: default
+      announceSound: /Audio/Misc/ninja_greeting.ogg
   - type: Sprite
     sprite: Markers/jobs.rsi
     layers:
@@ -204,6 +206,7 @@
     - MindRoleGhostRoleSoloAntagonist
     raffle:
       settings: default
+      announceSound: /Audio/Misc/paradox_clone_greeting.ogg
   - type: Sprite
     layers:
     - sprite: Markers/jobs.rsi
@@ -220,8 +223,6 @@
     name: ghost-role-information-derelict-cyborg-name
     description: ghost-role-information-derelict-cyborg-description
     rules: ghost-role-information-silicon-rules
-    raffle:
-      settings: default
   - type: Sprite
     sprite: Markers/jobs.rsi
     layers:
@@ -241,8 +242,6 @@
     description: ghost-role-information-wizard-desc
     mindRoles:
     - MindRoleGhostRoleSoloAntagonist
-    raffle:
-      settings: default
   - type: Sprite
     sprite: Markers/jobs.rsi
     layers:
