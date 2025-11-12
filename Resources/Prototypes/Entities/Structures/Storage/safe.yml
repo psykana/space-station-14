@@ -1,0 +1,106 @@
+- type: entity
+  id: SafeBase
+  parent: BaseStructure
+  name: safe
+  description: safe
+  abstract: true
+  components:
+  - type: Transform
+    noRot: true
+  - type: InteractionOutline
+  - type: Physics
+  - type: Fixtures
+    fixtures:
+      fix1:
+        shape:
+          !type:PhysShapeAabb
+          bounds: "-0.25,-0.48,0.25,0.48"
+        density: 75
+        mask:
+        - MachineMask
+        layer:
+        - MachineLayer
+  - type: PlaceableSurface
+    placeCentered: true
+    isPlaceable: false
+  - type: Appearance
+  - type: EntityStorageVisuals
+    stateBaseClosed: generic
+    stateDoorOpen: generic_open
+    stateDoorClosed: generic_door
+  - type: Lock
+    unlockOnClick: false
+    useAccess: false
+    showLockVerbs: false
+  - type: LockVisuals
+  - type: Sprite
+    sprite: Structures/Storage/closet.rsi
+    noRot: true
+    layers:
+    - state: generic
+      map: ["enum.StorageVisualLayers.Base"]
+    - state: generic_door
+      map: ["enum.StorageVisualLayers.Door"]
+    - state: locked
+      map: ["enum.LockVisualLayers.Lock"]
+      shader: unshaded
+
+- type: entity
+  id: SafeBase1
+  parent: SafeBase
+  abstract: true
+  components:
+  - type: EntityStorage
+    IsCollidableWhenOpen: true
+    Capacity: 10
+  - type: ContainerContainer
+    containers:
+      safe_inventory: !type:Container
+  - type: ItemSlots
+
+# Basic
+- type: entity
+  id: SafeBase2
+  parent: SafeBase1
+  name: safe
+  components:
+  - type: EntityStorageVisuals
+    stateBaseClosed: secure
+    stateDoorOpen: secure_open
+    stateDoorClosed: secure_door
+  - type: ActivatableUI
+    key: enum.StorageUiSafeKey.Key
+  - type: UserInterface
+    interfaces:
+      enum.StorageUiSafeKey.Key:
+        type: RotaryLockBoundUserInterface
+  - type: RotaryLock
+  
+# Basic
+- type: entity
+  id: SafeBase222
+  parent: SafeBase
+  name: safe222
+  components:
+  - type: EntityStorageVisuals
+    stateBaseClosed: secure
+    stateDoorOpen: secure_open
+    stateDoorClosed: secure_door
+  - type: ActivatableUI
+    key: enum.StorageUiSafeKey.Key
+  - type: UserInterface
+    interfaces:
+      enum.StorageUiSafeKey.Key:
+        type: RotaryLockBoundUserInterface
+#      enum.StorageUiKey.Key:
+#        type: RotaryLockBoundUserInterface
+  - type: RotaryLock
+  #- type: UIRequiresLock
+  - type: Storage
+    grid:
+    - 0,0,5,3
+  - type: Lock
+    unlockOnClick: true
+    useAccess: false
+    showLockVerbs: false
+ # - type: LockedStorage

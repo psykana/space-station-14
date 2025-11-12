@@ -1,0 +1,33 @@
+<lock:RotaryLockMenu xmlns="https://spacestation14.io"
+            xmlns:controls="clr-namespace:Content.Client.UserInterface.Controls"
+            xmlns:lock="clr-namespace:Content.Client.Lock.UI"
+            Resizable="True" MouseFilter="Stop" MinSize="500 500">
+
+    <BoxContainer Orientation="Vertical">
+        <PanelContainer StyleClasses="AngleRect" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0">
+            <TextureButton Name="CloseButton" StyleClasses="windowCloseButton"/>
+        </PanelContainer>
+        <PanelContainer Name="BackgroundPanel" VerticalExpand="True" HorizontalExpand="True"/>
+            <BoxContainer Name="SingleStorageContainer"
+          Access="Public"
+          HorizontalAlignment="Center"
+          HorizontalExpand="True"
+          Margin="10">
+            </BoxContainer>
+            <BoxContainer Align="Center" Orientation="Horizontal">
+                <Button Name="Left10" Text="Left 10"/>
+                <Button Name="Left1" Text="Left 1"/>
+                <Button Name="Open" Text="Open"/>
+                <Button Name="Right1" Text="Right 1"/>
+                <Button Name="Right10" Text="Right 10"/>
+            </BoxContainer>
+            <BoxContainer Align="Center" MinSize="50 50">
+                <Label Name="DialPosIndicator" />
+            </BoxContainer>
+            <BoxContainer Align="Center">
+                <lock:RotaryLockKnob Name="RotaryKnob"/>
+            </BoxContainer>
+            <controls:ListContainer Name="SafeContents" VerticalExpand="True" Margin="4 4"/>
+    </BoxContainer>
+</lock:RotaryLockMenu>
+
