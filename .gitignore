@@ -309,3 +309,6 @@ Resources/MapImages
 
 # Direnv stuff
 .direnv/
+
+# Fuzzer corpus output
+Fuzzer/corpus/
