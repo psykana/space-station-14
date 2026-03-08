@@ -204,6 +204,7 @@ public abstract class SharedTrayScannerSystem : EntitySystem
             return;
 
         scanner.Range = state.Range;
+        scanner.Mode = state.Mode;
         SetScannerEnabled(uid, state.Enabled, scanner);
     }
 }

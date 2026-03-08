@@ -1,6 +1,9 @@
 using Content.Client.Items;
 using Content.Client.Message;
+using Content.Client.Power.Visualizers;
 using Content.Client.Stylesheets;
+using Content.Shared.Atmos.Components;
+using Content.Shared.Disposal.Components;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Input;
 using Content.Shared.Inventory;
@@ -111,6 +114,7 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
         var playerPos = _transform.GetWorldPosition(playerXform, xformQuery);
         var playerMap = playerXform.MapID;
         var range = 0f;
+        var mode = TrayScannerMode.All;
         HashSet<Entity<SubFloorHideComponent>> inRange;
         var scannerQuery = GetEntityQuery<TrayScannerComponent>();
 
@@ -124,6 +128,7 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
                 continue;
 
             range = MathF.Max(scanner.Range, range);
+            mode = scanner.Mode;
             canSee = true;
             break;
         }
@@ -132,10 +137,16 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
 
         if (canSee)
         {
-            _lookup.GetEntitiesInRange(playerMap, playerPos, range, inRange, flags: Flags);
+            var entitiesInRange = new HashSet<Entity<SubFloorHideComponent>>();
+            _lookup.GetEntitiesInRange(playerMap, playerPos, range, entitiesInRange, flags: Flags);
 
-            foreach (var (uid, comp) in inRange)
+            foreach (var (uid, comp) in entitiesInRange)
             {
+                if (!MatchesMode(uid, mode))
+                    continue;
+
+                inRange.Add((uid, comp));
+
                 if (comp.IsUnderCover || _trayScanReveal.IsUnderRevealingEntity(uid))
                     EnsureComp<TrayRevealedComponent>(uid);
             }
@@ -222,5 +233,21 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
     private void SetRevealed(EntityUid uid, bool value)
     {
         _appearance.SetData(uid, SubFloorVisuals.ScannerRevealed, value);
+    }
+
+    private bool MatchesMode(EntityUid uid, TrayScannerMode mode)
+    {
+        switch (mode)
+        {
+            case TrayScannerMode.All:
+                return true;
+            case TrayScannerMode.Wiring:
+                return HasComp<CableVisualizerComponent>(uid);
+            case TrayScannerMode.Piping:
+                return HasComp<AtmosPipeLayersComponent>(uid) ||
+                       _appearance.TryGetData(uid, DisposalTubeVisuals.VisualState, out DisposalTubeVisualState _);
+            default:
+                return false;
+        }
     }
 }
