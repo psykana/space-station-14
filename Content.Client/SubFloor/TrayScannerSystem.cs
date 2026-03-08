@@ -1,9 +1,16 @@
+using Content.Client.Items;
+using Content.Client.Message;
+using Content.Client.Stylesheets;
 using Content.Shared.Hands.EntitySystems;
+using Content.Shared.Input;
 using Content.Shared.Inventory;
 using Content.Shared.SubFloor;
 using Robust.Client.Animations;
 using Robust.Client.GameObjects;
+using Robust.Client.Input;
 using Robust.Client.Player;
+using Robust.Client.UserInterface;
+using Robust.Client.UserInterface.Controls;
 using Robust.Shared.Timing;
 
 namespace Content.Client.SubFloor;
@@ -20,11 +27,72 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
     [Dependency] private readonly SharedTransformSystem _transform = default!;
     [Dependency] private readonly SpriteSystem _sprite = default!;
     [Dependency] private readonly TrayScanRevealSystem _trayScanReveal = default!;
+    [Dependency] private readonly IInputManager _inputManager = default!;
 
     private const string TRayAnimationKey = "trays";
     private const double AnimationLength = 0.3;
 
     public const LookupFlags Flags = LookupFlags.Static | LookupFlags.Sundries | LookupFlags.Approximate;
+
+    public override void Initialize()
+    {
+        base.Initialize();
+
+        //SubscribeLocalEvent<ClearAllOverlaysEvent>(_ => ClearAllOverlays());
+        Subs.ItemStatus<TrayScannerComponent>(OnCollectItemStatus);
+    }
+    private Control OnCollectItemStatus(Entity<TrayScannerComponent> entity)
+    {
+        _inputManager.TryGetKeyBinding((ContentKeyFunctions.AltUseItemInHand), out var binding);
+        return new StatusControl(entity, binding?.GetKeyString() ?? "");
+    }
+
+    private sealed class StatusControl : Control
+    {
+        private readonly RichTextLabel _label;
+        private readonly TrayScannerComponent _scanner;
+        private readonly string _keyBindingName;
+
+        private bool? _enabled = null;
+
+        public StatusControl(TrayScannerComponent scanner, string keyBindingName)
+        {
+            _scanner = scanner;
+            _keyBindingName = keyBindingName;
+            _label = new RichTextLabel { StyleClasses = { StyleClass.ItemStatus } };
+            AddChild(_label);
+        }
+
+        protected override void FrameUpdate(FrameEventArgs args)
+        {
+            base.FrameUpdate(args);
+
+            if (!_scanner.Enabled)
+            {
+                _label.SetMarkup("");
+                return;
+            }
+
+            var modeLocString = String.Empty;
+
+            switch (_scanner.Mode)
+            {
+                case TrayScannerMode.All:
+                    modeLocString = "tray-scanner-examine-mode-all";
+                    break;
+                case TrayScannerMode.Wiring:
+                    modeLocString = "tray-scanner-examine-mode-wiring";
+                    break;
+                case TrayScannerMode.Piping:
+                    modeLocString = "tray-scanner-examine-mode-piping";
+                    break;
+            }
+
+            _label.SetMarkup(Robust.Shared.Localization.Loc.GetString("tray-scanner-item-status-label",
+                ("mode", Robust.Shared.Localization.Loc.GetString(modeLocString)),
+                ("keybinding", _keyBindingName)));
+        }
+    }
 
     public override void Update(float frameTime)
     {
@@ -50,31 +118,12 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
         // API is extremely skrungly. If this ever shows up on dottrace ping me and laugh.
         var canSee = false;
 
-        // TODO: Common iterator for both systems.
-        if (_inventory.TryGetContainerSlotEnumerator(player.Value, out var enumerator))
+        foreach (var item in _inventory.GetHandOrInventoryEntities(player.Value, SlotFlags.POCKET))
         {
-            while (enumerator.MoveNext(out var slot))
-            {
-                foreach (var ent in slot.ContainedEntities)
-                {
-                    if (!scannerQuery.TryGetComponent(ent, out var sneakScanner) || !sneakScanner.Enabled)
-                        continue;
-
-                    canSee = true;
-                    range = MathF.Max(range, sneakScanner.Range);
-                }
-            }
-        }
-
-        foreach (var hand in _hands.EnumerateHands(player.Value))
-        {
-            if (!_hands.TryGetHeldItem(player.Value, hand, out var heldEntity))
+            if (!scannerQuery.TryGetComponent(item, out var scanner) || !scanner.Enabled)
                 continue;
 
-            if (!scannerQuery.TryGetComponent(heldEntity, out var heldScanner) || !heldScanner.Enabled)
-                continue;
-
-            range = MathF.Max(heldScanner.Range, range);
+            range = MathF.Max(scanner.Range, range);
             canSee = true;
             break;
         }
