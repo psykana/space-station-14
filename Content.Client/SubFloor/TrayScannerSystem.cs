@@ -187,12 +187,13 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
         {
             TrayScannerMode.All => true,
             TrayScannerMode.Wiring => HasComp<CableVisualizerComponent>(uid),
-            // TODO: proper comp lookup after disposals refactor
+            // TODO: proper comp query after disposals refactor
             TrayScannerMode.Piping => HasComp<AtmosPipeLayersComponent>(uid) || _appearance.TryGetData(uid, DisposalTubeVisuals.VisualState, out _),
             _ => false,
         };
     }
 
+    #region UI
     private Control OnCollectItemStatus(Entity<TrayScannerComponent> entity)
     {
         _inputManager.TryGetKeyBinding((ContentKeyFunctions.AltUseItemInHand), out var binding);
@@ -237,4 +238,5 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
             }
         }
     }
+    #endregion
 }
