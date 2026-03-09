@@ -25,14 +25,17 @@ public sealed partial class TrayScannerComponent : Component
     [DataField, AutoNetworkedField]
     public float Range = 4f;
 
-    [DataField]
-    public SoundSpecifier SoundSwitchMode = new SoundPathSpecifier("/Audio/Machines/quickbeep.ogg");
-
+    /// <summary>
+    ///     Cooldown time between mode switching.
+    /// </summary>
     [DataField, AutoNetworkedField]
     public TimeSpan UseDelay = TimeSpan.FromSeconds(0.5);
 
     [DataField, AutoPausedField, AutoNetworkedField]
     public TimeSpan LastUseAttempt;
+
+    [DataField]
+    public SoundSpecifier SoundSwitchMode = new SoundPathSpecifier("/Audio/Machines/quickbeep.ogg");
 }
 
 [Serializable, NetSerializable]

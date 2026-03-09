@@ -40,61 +40,7 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
     public override void Initialize()
     {
         base.Initialize();
-
-        //SubscribeLocalEvent<ClearAllOverlaysEvent>(_ => ClearAllOverlays());
         Subs.ItemStatus<TrayScannerComponent>(OnCollectItemStatus);
-    }
-    private Control OnCollectItemStatus(Entity<TrayScannerComponent> entity)
-    {
-        _inputManager.TryGetKeyBinding((ContentKeyFunctions.AltUseItemInHand), out var binding);
-        return new StatusControl(entity, binding?.GetKeyString() ?? "");
-    }
-
-    private sealed class StatusControl : Control
-    {
-        private readonly RichTextLabel _label;
-        private readonly TrayScannerComponent _scanner;
-        private readonly string _keyBindingName;
-
-        private bool? _enabled = null;
-
-        public StatusControl(TrayScannerComponent scanner, string keyBindingName)
-        {
-            _scanner = scanner;
-            _keyBindingName = keyBindingName;
-            _label = new RichTextLabel { StyleClasses = { StyleClass.ItemStatus } };
-            AddChild(_label);
-        }
-
-        protected override void FrameUpdate(FrameEventArgs args)
-        {
-            base.FrameUpdate(args);
-
-            if (!_scanner.Enabled)
-            {
-                _label.SetMarkup("");
-                return;
-            }
-
-            var modeLocString = String.Empty;
-
-            switch (_scanner.Mode)
-            {
-                case TrayScannerMode.All:
-                    modeLocString = "tray-scanner-examine-mode-all";
-                    break;
-                case TrayScannerMode.Wiring:
-                    modeLocString = "tray-scanner-examine-mode-wiring";
-                    break;
-                case TrayScannerMode.Piping:
-                    modeLocString = "tray-scanner-examine-mode-piping";
-                    break;
-            }
-
-            _label.SetMarkup(Robust.Shared.Localization.Loc.GetString("tray-scanner-item-status-label",
-                ("mode", Robust.Shared.Localization.Loc.GetString(modeLocString)),
-                ("keybinding", _keyBindingName)));
-        }
     }
 
     public override void Update(float frameTime)
@@ -237,17 +183,58 @@ public sealed class TrayScannerSystem : SharedTrayScannerSystem
 
     private bool MatchesMode(EntityUid uid, TrayScannerMode mode)
     {
-        switch (mode)
+        return mode switch
         {
-            case TrayScannerMode.All:
-                return true;
-            case TrayScannerMode.Wiring:
-                return HasComp<CableVisualizerComponent>(uid);
-            case TrayScannerMode.Piping:
-                return HasComp<AtmosPipeLayersComponent>(uid) ||
-                       _appearance.TryGetData(uid, DisposalTubeVisuals.VisualState, out DisposalTubeVisualState _);
-            default:
-                return false;
+            TrayScannerMode.All => true,
+            TrayScannerMode.Wiring => HasComp<CableVisualizerComponent>(uid),
+            // TODO: proper comp lookup after disposals refactor
+            TrayScannerMode.Piping => HasComp<AtmosPipeLayersComponent>(uid) || _appearance.TryGetData(uid, DisposalTubeVisuals.VisualState, out _),
+            _ => false,
+        };
+    }
+
+    private Control OnCollectItemStatus(Entity<TrayScannerComponent> entity)
+    {
+        _inputManager.TryGetKeyBinding((ContentKeyFunctions.AltUseItemInHand), out var binding);
+        return new StatusControl(entity, binding?.GetKeyString() ?? "");
+    }
+
+    private sealed class StatusControl : Control
+    {
+        private readonly RichTextLabel _label;
+        private readonly TrayScannerComponent _scanner;
+        private readonly string _keyBindingName;
+
+        public StatusControl(TrayScannerComponent scanner, string keyBindingName)
+        {
+            _scanner = scanner;
+            _keyBindingName = keyBindingName;
+            _label = new RichTextLabel { StyleClasses = { StyleClass.ItemStatus } };
+            AddChild(_label);
+        }
+
+        protected override void FrameUpdate(FrameEventArgs args)
+        {
+            base.FrameUpdate(args);
+
+            if (_scanner.Enabled)
+            {
+                var modeLocString = _scanner.Mode switch
+                {
+                    TrayScannerMode.All => "tray-scanner-examine-mode-all",
+                    TrayScannerMode.Wiring => "tray-scanner-examine-mode-wiring",
+                    TrayScannerMode.Piping => "tray-scanner-examine-mode-piping",
+                    _ => "",
+                };
+
+                _label.SetMarkup(Robust.Shared.Localization.Loc.GetString("tray-scanner-item-status-label",
+                    ("mode", Robust.Shared.Localization.Loc.GetString(modeLocString)),
+                    ("keybinding", _keyBindingName)));
+            }
+            else
+            {
+                _label.SetMarkup("");
+            }
         }
     }
 }
