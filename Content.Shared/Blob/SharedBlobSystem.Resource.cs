@@ -32,10 +32,7 @@ public abstract partial class SharedBlobSystem
             if (!blob.Pulsed)
                 continue;
 
-            if (created.Creator == null)
-                continue;
-
-            TryAddResource(created.Creator.Value, resource.Resource);
+            TryAddResource(created.Creator, resource.Resource);
             resource.NextResourceGen += resource.Delay;
             resource.Delay += resource.DelayAccumulation;
             Dirty(uid, resource);

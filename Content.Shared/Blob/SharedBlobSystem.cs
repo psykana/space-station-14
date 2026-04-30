@@ -47,8 +47,7 @@ public abstract partial class SharedBlobSystem : EntitySystem
     private EntityQuery<TransformComponent> _xformQuery;
     private EntityQuery<FixturesComponent> _fixtureQuery;
 
-    [ValidatePrototypeId<TagPrototype>]
-    public const string AllowBlobReplaceTag = "BlobAllowReplace";
+    private static readonly ProtoId<TagPrototype> AllowBlobReplaceTag = "BlobAllowReplace";
 
     /// <inheritdoc/>
     public override void Initialize()
@@ -113,7 +112,7 @@ public abstract partial class SharedBlobSystem : EntitySystem
         if (!TryGetBlobStructure(pos, out var blob) || !_tag.HasTag(blob.Value, AllowBlobReplaceTag))
             return;
 
-        var mapPos = pos.SnapToGrid().ToMap(EntityManager, _transform);
+        var mapPos = _transform.ToMapCoordinates(pos.SnapToGrid());
 
         var rangeComp = EntityManager.ComponentFactory.GetRegistration(args.RangeComponent).Type;
         var nearby = _lookup.GetEntitiesInRange(rangeComp, mapPos, args.MinRange);
@@ -415,7 +414,7 @@ public abstract partial class SharedBlobSystem : EntitySystem
         var query = EntityQueryEnumerator<BlobCoreComponent, BlobCreatedComponent>();
         while (query.MoveNext(out var uid, out var core, out var created))
         {
-            if (created.Creator != ent)
+            if (created.Creator != ent.Owner)
                 continue;
 
             blob = (uid, core, created);

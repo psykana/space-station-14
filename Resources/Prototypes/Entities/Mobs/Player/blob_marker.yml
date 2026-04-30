@@ -39,17 +39,19 @@
   - type: CanMoveInAir
 
 - type: entity
+  parent: BaseAction
   id: ActionBlobCreateResource
   name: Resource (40)
   description: Replace the current blob you are hovering over with a resource blob.
-  noSpawn: true
+  categories: [ HideSpawnMenu ]
   components:
-  - type: InstantAction
+  - type: Action
     itemIconStyle: NoItem
     checkCanInteract: false
     icon:
       sprite: Interface/Actions/actions_blob.rsi
       state: ui_resource
+  - type: InstantAction
     event:
       !type:BlobCreateStructureEvent
         structure: [ BlobStructureResource ]
@@ -59,17 +61,19 @@
         requiresNode: true
 
 - type: entity
+  parent: BaseAction
   id: ActionBlobCreateFactory
   name: Factory (60)
   description: Replace the current blob you are hovering over with a factory blob.
-  noSpawn: true
+  categories: [ HideSpawnMenu ]
   components:
-  - type: InstantAction
+  - type: Action
     itemIconStyle: NoItem
     checkCanInteract: false
     icon:
       sprite: Interface/Actions/actions_blob.rsi
       state: ui_factory
+  - type: InstantAction
     event:
       !type:BlobCreateStructureEvent
       structure: [ BlobStructureFactory ]
@@ -79,17 +83,19 @@
       requiresNode: true
 
 - type: entity
+  parent: BaseAction
   id: ActionBlobCreateNode
   name: Node (50)
   description: Replace the current blob you are hovering over with a blob node.
-  noSpawn: true
+  categories: [ HideSpawnMenu ]
   components:
-  - type: InstantAction
+  - type: Action
     itemIconStyle: NoItem
     checkCanInteract: false
     icon:
       sprite: Interface/Actions/actions_blob.rsi
       state: ui_node
+  - type: InstantAction
     event:
       !type:BlobCreateStructureEvent
       structure: [ BlobStructureNode ]
@@ -98,29 +104,33 @@
       rangeComponent: BlobNode
 
 - type: entity
+  parent: BaseAction
   id: ActionBlobJumpCore
   name: Jump to Core
   description: Teleports you to your core instantly.
-  noSpawn: true
+  categories: [ HideSpawnMenu ]
   components:
-  - type: InstantAction
+  - type: Action
     itemIconStyle: NoItem
     checkCanInteract: false
     icon:
       sprite: Interface/Actions/actions_blob.rsi
       state: ui_tocore
+  - type: InstantAction
     event: !type:BlobJumpToCoreEvent
 
 - type: entity
+  parent: BaseAction
   id: ActionBlobSwapCore
   name: Swap Core (80)
   description: Swaps a node and your core for 80 resources.
-  noSpawn: true
+  categories: [ HideSpawnMenu ]
   components:
-  - type: InstantAction
+  - type: Action
     itemIconStyle: NoItem
     checkCanInteract: false
     icon:
       sprite: Interface/Actions/actions_blob.rsi
       state: ui_swap
+  - type: InstantAction
     event: !type:BlobSwapCoreEvent

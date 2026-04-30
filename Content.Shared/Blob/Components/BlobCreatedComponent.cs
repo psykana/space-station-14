@@ -15,5 +15,5 @@ public sealed partial class BlobCreatedComponent : Component
     /// The blob marker that created this
     /// </summary>
     [DataField, AutoNetworkedField]
-    public EntityUid? Creator;
+    public EntityUid Creator;
 }
