@@ -7,18 +7,12 @@ public abstract partial class SharedBlobSystem
     public void InitializeResource()
     {
         SubscribeLocalEvent<BlobResourceComponent, BlobPulsedSetEvent>(OnResourcePulseSet);
-        SubscribeLocalEvent<BlobResourceComponent, EntityUnpausedEvent>(OnUnpaused);
     }
 
     private void OnResourcePulseSet(Entity<BlobResourceComponent> ent, ref BlobPulsedSetEvent args)
     {
         if (args.Pulsed)
             ent.Comp.NextResourceGen = _timing.CurTime + ent.Comp.Delay;
-    }
-
-    private void OnUnpaused(Entity<BlobResourceComponent> ent, ref EntityUnpausedEvent args)
-    {
-        ent.Comp.NextResourceGen += args.PausedTime;
     }
 
     private void UpdateResource()

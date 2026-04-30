@@ -9,12 +9,14 @@ namespace Content.Shared.Blob.Components;
 [RegisterComponent, NetworkedComponent]
 [Access(typeof(SharedBlobSystem))]
 [AutoGenerateComponentState]
+[AutoGenerateComponentPause]
 public sealed partial class BlobResourceComponent : Component
 {
     /// <summary>
     /// The time at which more points are generated.
     /// </summary>
     [DataField(customTypeSerializer: typeof(TimeOffsetSerializer)), AutoNetworkedField]
+    [AutoPausedField]
     public TimeSpan NextResourceGen;
 
     /// <summary>

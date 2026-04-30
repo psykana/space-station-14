@@ -12,6 +12,7 @@ namespace Content.Shared.Blob.Components;
 [RegisterComponent, NetworkedComponent]
 [Access(typeof(SharedBlobSystem))]
 [AutoGenerateComponentState]
+[AutoGenerateComponentPause]
 public sealed partial class BlobOvermindComponent : Component
 {
     [DataField, AutoNetworkedField]
@@ -24,6 +25,7 @@ public sealed partial class BlobOvermindComponent : Component
     public int ResourcePassiveGen = 2;
 
     [DataField(customTypeSerializer: typeof(TimeOffsetSerializer))]
+    [AutoPausedField]
     public TimeSpan NextSecond;
 
     [DataField]
