@@ -85,21 +85,13 @@ public abstract partial class SharedBlobSystem : EntitySystem
 
     private void OnMapInit(Entity<BlobOvermindComponent> ent, ref MapInitEvent args)
     {
-        var comp = ent.Comp;
+        ent.Comp.NextSecond = _timing.CurTime + TimeSpan.FromSeconds(1);
 
-        comp.NextSecond = _timing.CurTime + TimeSpan.FromSeconds(1);
-
-        if (TryComp<ActionsComponent>(ent, out var actions))
-        {
-            foreach (var action in comp.Actions)
-            {
-                _actions.AddAction(ent, action, component: actions);
-            }
-        }
+        foreach (var action in ent.Comp.Actions)
+            _actions.AddAction(ent, action);
 
         _alerts.ShowAlert(ent.Owner, ent.Comp.ResourceAlert);
-        SpawnBlobCreated(comp.CoreProtoId, Transform(ent).Coordinates, ent);
-        Dirty(ent, ent.Comp);
+        SpawnBlobCreated(ent.Comp.CoreProtoId, Transform(ent).Coordinates, ent);
     }
 
     private void OnCreateStructure(Entity<BlobOvermindComponent> ent, ref BlobCreateStructureEvent args)
