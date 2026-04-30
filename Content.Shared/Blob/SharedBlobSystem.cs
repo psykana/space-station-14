@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Content.Shared.Actions;
+using Content.Shared.Actions.Components;
 using Content.Shared.Alert;
 using Content.Shared.Blob.Components;
 using Content.Shared.Coordinates.Helpers;
@@ -97,7 +98,7 @@ public abstract partial class SharedBlobSystem : EntitySystem
             }
         }
 
-        _alerts.ShowAlert(ent, ent.Comp.ResourceAlert);
+        _alerts.ShowAlert(ent.Owner, ent.Comp.ResourceAlert);
         SpawnBlobCreated(comp.CoreProtoId, Transform(ent).Coordinates, ent);
         Dirty(ent, ent.Comp);
     }
@@ -243,7 +244,7 @@ public abstract partial class SharedBlobSystem : EntitySystem
         if (!TryComp<BlobOvermindComponent>(playerEnt, out var blobMarker))
             return false;
 
-        if (!coords.TryGetTileRef(out var tile, EntityManager) ||
+        if (!_turf.TryGetTileRef(coords, out var tile) ||
             _turf.IsTileBlocked(tile.Value, CollisionGroup.MidImpassable))
         {
             // todo in this scenario, make an adjacent blob wall "attack" this tile at cost of 2 resource.

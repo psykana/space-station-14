@@ -28,13 +28,6 @@ public sealed partial class GenericCounterAlertComponent : Component
     [DataField]
     public bool HideLeadingZeroes = true;
 
-    /// <summary>
-    /// The size of the alert sprite.
-    /// Used to calculate offsets.
-    /// </summary>
-    [DataField]
-    public bool HideLeadingZeroes = true;
-
     [DataField]
     public Vector2i AlertSize = new(32, 32);
 
