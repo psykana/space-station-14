@@ -336,19 +336,20 @@ public abstract partial class SharedBlobSystem : EntitySystem
     {
         ent = null;
 
-        var grid = coords.GetGridUid(EntityManager);
+        var grid = _transform.GetGrid(coords);
         if (!TryComp<MapGridComponent>(grid, out var gridComp))
             return false;
 
         if (!_map.TryGetTileRef(grid.Value, gridComp, coords, out var tile))
             return false;
 
-        foreach (var cell in _map.GetAnchoredEntities(grid.Value, gridComp, tile.GridIndices))
+        var enumerator = _map.GetAnchoredEntitiesEnumerator(grid.Value, gridComp, tile.GridIndices);
+        while (enumerator.MoveNext(out var cell))
         {
             if (!BlobStructureQuery.TryGetComponent(cell, out var comp))
                 continue;
 
-            ent = (cell, comp);
+            ent = (cell.Value, comp);
             return true;
         }
 
