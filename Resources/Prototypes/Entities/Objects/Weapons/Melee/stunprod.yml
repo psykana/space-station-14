@@ -7,9 +7,11 @@
   - type: Sprite
     sprite: Objects/Weapons/Melee/stunprod.rsi
     layers:
+    - state: stunprod_nocell
     - state: stunprod_off
       map: [ "enum.ToggleableVisuals.Layer" ]
   - type: ItemToggle
+    onActivate: false
     soundActivate:
       collection: sparks
       params:
@@ -27,7 +29,8 @@
       types:
         Shock: 5
   - type: Stunbaton
-    energyPerUse: 120
+    energyPerUse: 100
+    maxChargeFraction: 0.05
   - type: MeleeWeapon
     wideAnimationRotation: -135
     damage:
@@ -42,9 +45,15 @@
     damage: 35
     sound: /Audio/Weapons/egloves.ogg
   - type: LandAtCursor # it deals stamina damage when thrown
-  - type: Battery
-    maxCharge: 360
-    startingCharge: 360
+  - type: ContainerContainer
+    containers:
+      cell_slot: !type:ContainerSlot {}
+  - type: PowerCellSlot
+    cellSlotId: cell_slot
+  - type: ItemSlots
+    slots:
+      cell_slot:
+        name: power-cell-slot-component-slot-name-default
   - type: UseDelay
   - type: Item
     heldPrefix: off
@@ -63,8 +72,24 @@
         enum.ToggleableVisuals.Layer:
           True: {state: stunprod_on}
           False: {state: stunprod_off}
+      enum.StunbatonVisuals.NoCell:
+        enum.ToggleableVisuals.Layer:
+          True: {visible: false}
+          False: {visible: true}
   - type: StaticPrice
     price: 100
   - type: Construction
     graph: makeshiftstunprod
     node: msstunprod
+
+- type: entity
+  name: stun prod
+  suffix: small cell
+  parent: [ Stunprod ]
+  id: StunprodCellSmall
+  components:
+  - type: ItemSlots
+    slots:
+      cell_slot:
+        name: power-cell-slot-component-slot-name-default
+        startingItem: PowerCellMedium

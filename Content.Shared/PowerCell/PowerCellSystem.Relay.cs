@@ -1,4 +1,5 @@
 using Content.Shared.Emp;
+using Content.Shared.Item.ItemToggle.Components;
 using Content.Shared.Kitchen;
 using Content.Shared.Power;
 using Content.Shared.PowerCell.Components;
@@ -14,6 +15,7 @@ public sealed partial class PowerCellSystem
         SubscribeLocalEvent<PowerCellSlotComponent, RejuvenateEvent>(RelayToCell);
         SubscribeLocalEvent<PowerCellSlotComponent, GetChargeEvent>(RelayToCell);
         SubscribeLocalEvent<PowerCellSlotComponent, ChangeChargeEvent>(RelayToCell);
+        SubscribeLocalEvent<PowerCellSlotComponent, ItemToggledEvent>(RelayToCell);
 
         SubscribeLocalEvent<PowerCellComponent, EmpAttemptEvent>(RelayToCellSlot); // Prevent the ninja from EMPing its own battery
         SubscribeLocalEvent<PowerCellComponent, ChargeChangedEvent>(RelayToCellSlot);

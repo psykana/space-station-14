@@ -1,6 +1,5 @@
 using Content.Shared.Damage.Components;
 using Content.Shared.Item.ItemToggle.Components;
-using Content.Shared.Power.Components;
 using Robust.Shared.GameStates;
 
 namespace Content.Shared.Stunnable;
@@ -15,8 +14,17 @@ namespace Content.Shared.Stunnable;
 public sealed partial class StunbatonComponent : Component
 {
     /// <summary>
-    /// The charge required per hit.
+    /// The flat charge required per hit.
     /// </summary>
     [DataField, AutoNetworkedField]
     public float EnergyPerUse = 350;
+
+    /// <summary>
+    /// Additional charge required per hit, as a fraction of the battery's max charge.
+    /// Total cost per hit is <c>EnergyPerUse + MaxChargeFraction * MaxCharge</c>.
+    /// Used to scale high-capacity cells to prevent absurd number of hits.
+    /// If 0, only <see cref="EnergyPerUse"/> is consumed.
+    /// </summary>
+    [DataField, AutoNetworkedField]
+    public float MaxChargeFraction = 0f;
 }
