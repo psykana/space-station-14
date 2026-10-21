@@ -43,7 +43,7 @@ public sealed partial class DragDropSystem : SharedDragDropSystem
     [Dependency] private SharedInteractionSystem _interactionSystem = default!;
     [Dependency] private CombatModeSystem _combatMode = default!;
     [Dependency] private InputSystem _inputSystem = default!;
-    [Dependency] private ActionBlockerSystem _actionBlockerSystem = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private EntityLookupSystem _lookup = default!;
     [Dependency] private SharedPopupSystem _popup = default!;
     [Dependency] private SharedTransformSystem _transformSystem = default!;
@@ -513,15 +513,11 @@ public sealed partial class DragDropSystem : SharedDragDropSystem
     /// </returns>
     private bool? ValidDragDrop(EntityUid user, EntityUid dragged, EntityUid target)
     {
-        if (!_actionBlockerSystem.CanInteract(user, target))
+        var interact = new InteractionRequirements();
+        if (!_capabilities.CanPerform(user, interact, target))
             return null;
 
-        // CanInteract() doesn't support checking a second "target" entity.
-        // Doing so manually:
-        var ev = new GettingInteractedWithAttemptEvent(user, dragged);
-        RaiseLocalEvent(dragged, ref ev);
-
-        if (ev.Cancelled)
+        if (!_capabilities.CanPerform(user, interact, dragged))
             return false;
 
         var dropEv = new CanDropDraggedEvent(user, target);

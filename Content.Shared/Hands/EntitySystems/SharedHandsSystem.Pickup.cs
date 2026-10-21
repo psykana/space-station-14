@@ -251,7 +251,7 @@ public abstract partial class SharedHandsSystem
     /// <summary>
     /// Small helper function meant as a last step before <see cref="DoPickup"/>
     /// is called. Used to run a cancelable before pickup event that can have
-    /// side effects, unlike the side effect free <see cref="GettingPickedUpAttemptEvent"/>.
+    /// side effects, unlike the side effect free <see cref="Content.Shared.ActionBlocker.MobActionTargetAttemptEvent"/>.
     /// </summary>
     private bool BeforeDoPickup(Entity<HandsComponent?> user, EntityUid item)
     {

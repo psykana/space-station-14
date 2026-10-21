@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Hands;
 using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Inventory.VirtualItem;
@@ -16,7 +17,7 @@ public sealed partial class MultiHandedItemSystem : EntitySystem
     /// <inheritdoc/>
     public override void Initialize()
     {
-        SubscribeLocalEvent<MultiHandedItemComponent, GettingPickedUpAttemptEvent>(OnAttemptPickup);
+        SubscribeLocalEvent<MultiHandedItemComponent, MobActionTargetAttemptEvent>(OnTargetAttempt);
         SubscribeLocalEvent<MultiHandedItemComponent, VirtualItemDeletedEvent>(OnVirtualItemDeleted);
         SubscribeLocalEvent<MultiHandedItemComponent, GotEquippedHandEvent>(OnEquipped);
         SubscribeLocalEvent<MultiHandedItemComponent, GotUnequippedHandEvent>(OnUnequipped);
@@ -35,19 +36,15 @@ public sealed partial class MultiHandedItemSystem : EntitySystem
         _virtualItem.DeleteInHandsMatching(args.User, ent.Owner);
     }
 
-    private void OnAttemptPickup(Entity<MultiHandedItemComponent> ent, ref GettingPickedUpAttemptEvent args)
+    private void OnTargetAttempt(Entity<MultiHandedItemComponent> ent, ref MobActionTargetAttemptEvent args)
     {
-        if (args.Cancelled || _hands.CountFreeHands(args.User) >= ent.Comp.HandsNeeded)
+        if (args.Action != MobAction.Pickup || _hands.CountFreeHands(args.User) >= ent.Comp.HandsNeeded)
             return;
 
-        args.Cancel();
-
-        if (args.ShowPopup)
-            _popup.PopupCursor(
-                Loc.GetString("multi-handed-item-pick-up-fail",
-                    ("number", ent.Comp.HandsNeeded - 1),
-                    ("item", ent.Owner)),
-                args.User);
+        args.Cancelled = true;
+        args.Reason = Loc.GetString("multi-handed-item-pick-up-fail",
+            ("number", ent.Comp.HandsNeeded - 1),
+            ("item", ent.Owner));
     }
 
     private void OnVirtualItemDeleted(Entity<MultiHandedItemComponent> ent, ref VirtualItemDeletedEvent args)

@@ -7,6 +7,7 @@ using Content.Shared.Item;
 using Content.Shared.Movement.Components;
 using Content.Shared.Movement.Events;
 using Content.Shared.Pointing;
+using Content.Shared.Popups;
 using Content.Shared.Pulling.Events;
 using Content.Shared.Speech;
 using Content.Shared.Standing;
@@ -23,6 +24,7 @@ namespace Content.Shared.ActionBlocker;
 public sealed partial class MobCapabilitiesSystem
 {
     [Dependency] private SharedContainerSystem _container = default!;
+    [Dependency] private SharedPopupSystem _popup = default!;
 
     [Dependency] private EntityQuery<ComplexInteractionComponent> _complexQuery = default!;
     [Dependency] private EntityQuery<InputMoverComponent> _moverQuery = default!;
@@ -65,7 +67,13 @@ public sealed partial class MobCapabilitiesSystem
     public bool CanPickup(EntityUid user, EntityUid item, bool showPopup = false)
     {
         var req = new InteractionRequirements { Action = MobAction.Pickup };
-        return Perform(user, req, item, null, new LegacyArgs(ShowPopup: showPopup), out _);
+        if (Perform(user, req, item, null, new LegacyArgs(ShowPopup: showPopup), out var reason))
+            return true;
+
+        if (showPopup && reason != null)
+            _popup.PopupCursor(reason, user);
+
+        return false;
     }
 
     /// <summary>
@@ -236,6 +244,9 @@ public sealed partial class MobCapabilitiesSystem
     /// Raises the typed attempt events that <see cref="ActionBlockerSystem"/> used to raise. Each one is deleted once
     /// its last subscriber has moved to conditions, rules or properties (spec §16).
     /// </summary>
+    // The obsolete target events have no upstream subscribers left, but downstream code may still subscribe to them
+    // until they are removed.
+#pragma warning disable CS0618
     private bool RaiseLegacyAttempts(EntityUid user, MobAction action, EntityUid? target, EntityUid? used, LegacyArgs legacy)
     {
         switch (action)
@@ -391,6 +402,8 @@ public sealed partial class MobCapabilitiesSystem
         }
     }
 
+#pragma warning restore CS0618
+
     private bool RaiseConsciousAttempt(EntityUid user)
     {
         var ev = new ConsciousAttemptEvent(user);
@@ -398,6 +411,7 @@ public sealed partial class MobCapabilitiesSystem
         return !ev.Cancelled;
     }
 
+#pragma warning disable CS0618
     private bool RaiseAttackAttempts(EntityUid user, EntityUid? target, LegacyArgs legacy)
     {
         // If target is in a container can we attack
@@ -427,4 +441,5 @@ public sealed partial class MobCapabilitiesSystem
         RaiseLocalEvent(target.Value, ref targetEv);
         return !targetEv.Cancelled;
     }
+#pragma warning restore CS0618
 }

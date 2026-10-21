@@ -19,6 +19,7 @@ namespace Content.Shared.Throwing
     /// <param name="User">The user that threw this entity.</param>
     /// <param name="Cancelled">Whether or not the throw should be cancelled.</param>
     [ByRefEvent]
+    [Obsolete("Subscribe to MobActionTargetAttemptEvent and check for MobAction.Throw. This event will be removed in a future release.")]
     public record struct ThrowItemAttemptEvent(EntityUid User, bool Cancelled = false);
 
     /// <summary>

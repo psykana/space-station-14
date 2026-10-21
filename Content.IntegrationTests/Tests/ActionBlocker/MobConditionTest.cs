@@ -4,7 +4,9 @@ using Content.IntegrationTests.Tests.Interaction;
 using Content.Server.Cuffs;
 using Content.Shared.ActionBlocker;
 using Content.Shared.Cuffs.Components;
+using System.Linq;
 using Content.Shared.Damage.ForceSay;
+using Content.Shared.Inventory.VirtualItem;
 using Content.Shared.Mobs;
 using Content.Shared.Mobs.Systems;
 using Content.Shared.Paper;
@@ -59,7 +61,6 @@ public sealed class MobConditionTest : InteractionTest
 
     protected override string PlayerPrototype => TestMob;
 
-    [SidedDependency(Side.Server)] private readonly ActionBlockerSystem _sBlocker = default!;
     [SidedDependency(Side.Server)] private readonly MobCapabilitiesSystem _sCapabilities = default!;
     [SidedDependency(Side.Server)] private readonly CuffableSystem _sCuffable = default!;
     [SidedDependency(Side.Server)] private readonly MobStateSystem _sMobState = default!;
@@ -68,6 +69,11 @@ public sealed class MobConditionTest : InteractionTest
     [SidedDependency(Side.Client)] private readonly MobCapabilitiesSystem _cCapabilities = default!;
 
     private static readonly InteractionRequirements ForgiveRestraint = new() { Ignoring = MobCondition.Restrained };
+
+    private bool SCan(MobAction action, EntityUid? target = null)
+    {
+        return _sCapabilities.CanPerform(SPlayer, new InteractionRequirements { Action = action }, target);
+    }
 
     private EntityUid _cuffs;
 
@@ -128,7 +134,7 @@ public sealed class MobConditionTest : InteractionTest
 
         await Server.WaitAssertion(() =>
         {
-            Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
+            Assert.That(SCan(MobAction.Interact), Is.False);
             Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.True);
         });
 
@@ -152,11 +158,11 @@ public sealed class MobConditionTest : InteractionTest
         {
             Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Restrained), Is.True);
             Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Unconscious), Is.False);
-            Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
+            Assert.That(SCan(MobAction.Interact), Is.False);
         });
 
         await Uncuff();
-        await Server.WaitAssertion(() => Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.True));
+        await Server.WaitAssertion(() => Assert.That(SCan(MobAction.Interact), Is.True));
     }
 
     [Test, Description("A critical mob can't do anything, except say its last words once.")]
@@ -168,28 +174,31 @@ public sealed class MobConditionTest : InteractionTest
         {
             Assert.Multiple(() =>
             {
-                Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
-                Assert.That(_sBlocker.CanConsciouslyPerformAction(SPlayer), Is.False);
-                Assert.That(_sBlocker.CanSpeak(SPlayer), Is.False);
-                Assert.That(_sBlocker.CanEmote(SPlayer), Is.False);
-                Assert.That(_sBlocker.CanDrop(SPlayer), Is.False);
-                Assert.That(_sBlocker.CanChangeDirection(SPlayer), Is.False);
-                Assert.That(_sBlocker.CanMove(SPlayer), Is.False);
+                Assert.That(SCan(MobAction.Interact), Is.False);
+                Assert.That(SCan(MobAction.Conscious), Is.False);
+                Assert.That(SCan(MobAction.Speak), Is.False);
+                Assert.That(SCan(MobAction.Emote), Is.False);
+                Assert.That(SCan(MobAction.Drop), Is.False);
+                Assert.That(SCan(MobAction.ChangeDirection), Is.False);
+                Assert.That(_sCapabilities.CanMove(SPlayer), Is.False);
                 Assert.That(_sCapabilities.IsBlocked(SPlayer, MobAction.StandUp), Is.True);
+                Assert.That(SCan(MobAction.Point), Is.False);
+                Assert.That(SCan(MobAction.Stand), Is.False);
+                Assert.That(SCan(MobAction.Down), Is.True, "Crit must still be able to lie the mob down.");
             });
 
             SEntMan.AddComponent<AllowNextCritSpeechComponent>(SPlayer);
-            Assert.That(_sBlocker.CanSpeak(SPlayer), Is.True, "Last words were not allowed.");
+            Assert.That(SCan(MobAction.Speak), Is.True, "Last words were not allowed.");
         });
 
         await RunTicks(1);
-        await Server.WaitAssertion(() => Assert.That(_sBlocker.CanSpeak(SPlayer), Is.False, "Last words were granted twice."));
+        await Server.WaitAssertion(() => Assert.That(SCan(MobAction.Speak), Is.False, "Last words were granted twice."));
 
         await SetMobState(MobState.Alive);
         await Server.WaitAssertion(() =>
         {
-            Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.True);
-            Assert.That(_sBlocker.CanMove(SPlayer), Is.True);
+            Assert.That(SCan(MobAction.Interact), Is.True);
+            Assert.That(_sCapabilities.CanMove(SPlayer), Is.True);
         });
     }
 
@@ -202,9 +211,9 @@ public sealed class MobConditionTest : InteractionTest
         {
             Assert.Multiple(() =>
             {
-                Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
-                Assert.That(_sBlocker.CanMove(SPlayer), Is.False);
-                Assert.That(_sBlocker.CanSpeak(SPlayer), Is.True);
+                Assert.That(SCan(MobAction.Interact), Is.False);
+                Assert.That(_sCapabilities.CanMove(SPlayer), Is.False);
+                Assert.That(SCan(MobAction.Speak), Is.True);
                 Assert.That(_sCapabilities.IsBlocked(SPlayer, MobAction.Point), Is.False);
                 Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.False);
             });
@@ -213,8 +222,8 @@ public sealed class MobConditionTest : InteractionTest
         await Stun(false);
         await Server.WaitAssertion(() =>
         {
-            Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.True);
-            Assert.That(_sBlocker.CanMove(SPlayer), Is.True);
+            Assert.That(SCan(MobAction.Interact), Is.True);
+            Assert.That(_sCapabilities.CanMove(SPlayer), Is.True);
         });
     }
 
@@ -245,6 +254,21 @@ public sealed class MobConditionTest : InteractionTest
         {
             Assert.That(_cCapabilities.IsBlocked(CPlayer, MobAction.Interact), Is.True);
             Assert.That(_cCapabilities.IsBlocked(CPlayer, MobAction.Interact, MobCondition.Restrained), Is.False);
+        });
+    }
+
+    [Test, Description("Target vetoes apply after the user's own conditions are forgiven.")]
+    public async Task VirtualItemVetoesInteraction()
+    {
+        await Cuff();
+
+        await Server.WaitAssertion(() =>
+        {
+            var virtualItem = HandSys.EnumerateHeld(SPlayer).First(SEntMan.HasComponent<VirtualItemComponent>);
+
+            Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.True);
+            Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint, virtualItem), Is.False,
+                "A virtual item accepted an interaction.");
         });
     }
 

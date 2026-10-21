@@ -1,4 +1,4 @@
-using Content.Shared.Interaction.Events;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Mech.Components;
 
 namespace Content.Shared.Mech.EntitySystems;
@@ -6,9 +6,10 @@ namespace Content.Shared.Mech.EntitySystems;
 public abstract partial class SharedMechSystem
 {
     [SubscribeLocalEvent]
-    private void OnGettingAttackedAttempt(Entity<MechComponent> ent, ref GettingAttackedAttemptEvent args)
+    private void OnTargetAttempt(Entity<MechComponent> ent, ref MobActionTargetAttemptEvent args)
     {
-        RelayRefToPilot(ent, ref args);
+        if (args.Action == MobAction.Attack)
+            RelayRefToPilot(ent, ref args);
     }
 
     private void RelayRefToPilot<T>(Entity<MechComponent> uid, ref T args) where T :struct

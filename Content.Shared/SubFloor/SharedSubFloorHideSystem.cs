@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Audio;
 using Content.Shared.Construction.Components;
 using Content.Shared.Explosion;
@@ -37,8 +38,7 @@ namespace Content.Shared.SubFloor
             SubscribeLocalEvent<SubFloorHideComponent, ComponentShutdown>(OnSubFloorTerminating);
             // Like 80% sure this doesn't need to handle re-anchoring.
             SubscribeLocalEvent<SubFloorHideComponent, AnchorStateChangedEvent>(HandleAnchorChanged);
-            SubscribeLocalEvent<SubFloorHideComponent, GettingInteractedWithAttemptEvent>(OnInteractionAttempt);
-            SubscribeLocalEvent<SubFloorHideComponent, GettingAttackedAttemptEvent>(OnAttackAttempt);
+            SubscribeLocalEvent<SubFloorHideComponent, MobActionTargetAttemptEvent>(OnTargetAttempt);
             SubscribeLocalEvent<SubFloorHideComponent, GetExplosionResistanceEvent>(OnGetExplosionResistance);
             SubscribeLocalEvent<SubFloorHideComponent, AnchorAttemptEvent>(OnAnchorAttempt);
             SubscribeLocalEvent<SubFloorHideComponent, UnanchorAttemptEvent>(OnUnanchorAttempt);
@@ -74,21 +74,24 @@ namespace Content.Shared.SubFloor
                 args.DamageCoefficient = 0;
         }
 
-        private void OnAttackAttempt(EntityUid uid, SubFloorHideComponent component, ref GettingAttackedAttemptEvent args)
+        private void OnTargetAttempt(EntityUid uid, SubFloorHideComponent component, ref MobActionTargetAttemptEvent args)
         {
-            if (component.BlockInteractions && component.IsUnderCover)
-                args.Cancelled = true;
-        }
-
-        private void OnInteractionAttempt(EntityUid uid, SubFloorHideComponent component, ref GettingInteractedWithAttemptEvent args)
-        {
-            // Allow admins (e.g., mappers/aghosts) to twiddle with stuff under subfloors
-            if (HasComp<BypassInteractionChecksComponent>(args.Uid))
+            // No interactions with entities hidden under floor tiles.
+            if (!component.BlockInteractions || !component.IsUnderCover)
                 return;
 
-            // No interactions with entities hidden under floor tiles.
-            if (component.BlockInteractions && component.IsUnderCover)
-                args.Cancelled = true;
+            switch (args.Action)
+            {
+                case MobAction.Attack:
+                    args.Cancelled = true;
+                    break;
+                case MobAction.Interact:
+                case MobAction.UiAccess:
+                    // Allow admins (e.g., mappers/aghosts) to twiddle with stuff under subfloors
+                    if (!HasComp<BypassInteractionChecksComponent>(args.User))
+                        args.Cancelled = true;
+                    break;
+            }
         }
 
         private void OnSubFloorStarted(EntityUid uid, SubFloorHideComponent component, ComponentStartup _)
