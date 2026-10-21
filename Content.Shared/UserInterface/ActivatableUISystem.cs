@@ -1,6 +1,5 @@
 using Content.Shared.ActionBlocker;
 using Content.Shared.Administration.Managers;
-using Content.Shared.Ghost.Components;
 using Content.Shared.Hands;
 using Content.Shared.Hands.Components;
 using Content.Shared.Hands.EntitySystems;
@@ -117,9 +116,7 @@ public sealed partial class ActivatableUISystem : EntitySystem
             }
         }
 
-        return ((args.CanInteract
-            || HasComp<GhostComponent>(args.User)
-            && !component.BlockSpectators))
+        return GetUiStatus(args.User, (uid, component), component.Key) >= UiStatus.ReadOnly
             && RaiseCanOpenEventChecks(args.User, uid, silent: true); // silent to prevent popups or sounds when only looking at the verb
     }
 
@@ -202,14 +199,12 @@ public sealed partial class ActivatableUISystem : EntitySystem
             return true;
         }
 
-        if (!_blockerSystem.CanInteract(user, uiEntity) && (!HasComp<GhostComponent>(user) || aui.BlockSpectators))
+        // Covers spectators, admin-only, complex interaction and the user's conditions.
+        var status = GetUiStatus(user, (uiEntity, aui), aui.Key);
+        if (status < UiStatus.ReadOnly)
             return false;
 
-        if (aui.RequiresComplex)
-        {
-            if (!_blockerSystem.CanComplexInteract(user))
-                return false;
-        }
+        var interactive = status == UiStatus.Interactive;
 
         if (aui.InHandsOnly)
         {
@@ -223,10 +218,8 @@ public sealed partial class ActivatableUISystem : EntitySystem
                 return false;
         }
 
-        if (aui.AdminOnly && !_adminManager.IsAdmin(user))
-            return false;
-
-        if (aui.SingleUser && aui.CurrentSingleUser != null && user != aui.CurrentSingleUser)
+        // A read-only viewer neither holds nor respects the single-user lock.
+        if (interactive && aui.SingleUser && aui.CurrentSingleUser != null && user != aui.CurrentSingleUser)
         {
             var message = Loc.GetString("machine-already-in-use", ("machine", uiEntity));
             _popupSystem.PopupEntity(message, uiEntity, user);
@@ -244,14 +237,16 @@ public sealed partial class ActivatableUISystem : EntitySystem
 
         // Give the UI an opportunity to prepare itself if it needs to do anything
         // before opening
-        var bae = new BeforeActivatableUIOpenEvent(user);
+        var bae = new BeforeActivatableUIOpenEvent(user) { Status = status };
         RaiseLocalEvent(uiEntity, bae);
 
-        SetCurrentSingleUser(uiEntity, user, aui);
+        if (interactive)
+            SetCurrentSingleUser(uiEntity, user, aui);
+
         _uiSystem.OpenUi(uiEntity, aui.Key, user);
 
         //Let the component know a user opened it so it can do whatever it needs to do
-        var aae = new AfterActivatableUIOpenEvent(user);
+        var aae = new AfterActivatableUIOpenEvent(user) { Status = status };
         RaiseLocalEvent(uiEntity, aae);
 
         return true;

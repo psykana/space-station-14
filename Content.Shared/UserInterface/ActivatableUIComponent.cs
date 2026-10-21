@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Whitelist;
 using Robust.Shared.GameStates;
 using Robust.Shared.Serialization.TypeSerializers.Implementations;
@@ -58,6 +59,13 @@ namespace Content.Shared.UserInterface
         [ViewVariables(VVAccess.ReadWrite)]
         [DataField]
         public bool BlockSpectators;
+
+        /// <summary>
+        ///     Conditions under which this UI opens read-only instead of refusing to open.
+        ///     For example, a cuffed user can still read paper, but can't write on it.
+        /// </summary>
+        [DataField, AutoNetworkedField]
+        public MobCondition ReadOnlyConditions;
 
         /// <summary>
         ///     Whether the item must be in the user's currently selected/active hand.

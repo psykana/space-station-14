@@ -74,7 +74,10 @@ public sealed partial class PaperSystem : EntitySystem
 
     private void BeforeUIOpen(Entity<PaperComponent> entity, ref BeforeActivatableUIOpenEvent args)
     {
-        entity.Comp.Mode = PaperAction.Read;
+        // Mode is shared by every viewer; a read-only viewer must not kick a writer out of write mode.
+        if (args.Status == UiStatus.Interactive)
+            entity.Comp.Mode = PaperAction.Read;
+
         UpdateUserInterface(entity);
     }
 
