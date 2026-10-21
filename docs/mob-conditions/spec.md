@@ -29,11 +29,16 @@ bucket it moves to. Sections 2–14 specify the first steps toward it.
 **Not covered:**
 - Perception and chat filtering (design §8).
 
-**Migration rule (temporary):**
-- Until `ActionBlockerSystem` is deleted, each `ActionBlockerSystem.CanX()` keeps its signature
-  and semantics, and forwards to the bookkeeper (§15.5).
-- Each existing attempt event keeps being raised until the last subscriber in §16 has moved
-  out of it. Then it is deleted. Unmigrated subscribers keep working unchanged until then.
+**Migration rule (temporary).** This is an upstream repository, so downstream forks get a
+deprecation window instead of a break:
+- **`ActionBlockerSystem`** is `[Obsolete]`. Each `CanX()` keeps its signature and semantics and
+  forwards to the bookkeeper (§15.5). It is removed once the new API has been stable for a
+  release.
+- **An attempt event whose last upstream subscriber has moved out (§16)** is marked
+  `[Obsolete]`, with a message naming the action to check instead. The bookkeeper keeps raising
+  it for downstream subscribers until the removal release, suppressing the warning only at its
+  own raise site.
+- Unmigrated subscribers keep working unchanged until then.
 
 ## 2. Types
 
@@ -95,6 +100,7 @@ Each member names the attempt event that `MobCapabilitiesSystem` cancels for it.
 | `ChangeDirection` | 13 | `ChangeDirectionAttemptEvent` (`Content.Shared.Interaction.Events`) |
 | `UiAccess` | 14 | none; consumed by `GetUiStatus` (§8) |
 | `StandUp` | 15 | `StandUpAttemptEvent` (`Content.Shared.Stunnable`, by-ref) |
+| `Down` | 16 | `DownAttemptEvent` (`Content.Shared.Standing`). Not blocked by `Unconscious`: crit and death lie the mob down. |
 
 `enum MobAction : uint`, `[Flags, Serializable, NetSerializable]`, `None = 0`.
 
@@ -911,7 +917,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 | Q7 | Are the §6.3 deltas acceptable? Frozen players can't drop, puppets can't attack or throw, spiked mobs can't interact, mobs in disposals can't use held items. | Each one is defensible, but each is a gameplay change. List it in that row's PR, or keep a residual event. |
 | Q8 | Should spectators be able to inspect `InHandsOnly` UIs, for example a PDA lying on the floor (§8.6)? | Ask maintainers. If no, step 1 of §8.1 returns `Close` for spectators when `comp.InHandsOnly`. |
 | Q9 | Should `BlockSpectators` stay entity-wide (today's `:159` behaviour) or become per-key like the rest of the policy (§8.1)? | Keep it entity-wide for slice 3 (parity), and revisit if a multi-key entity needs a mixed policy. |
-| Q10 | What is the bookkeeper called once it replaces `ActionBlockerSystem` (§15.1)? | Rename before the forwarding step (§15.5), while the API has one caller per method. `MobCapabilitiesSystem` undersells it: it answers for any entity, and it owns pair rules and target vetoes too. Ask maintainers. |
+| Q10 | What is the bookkeeper called once it replaces `ActionBlockerSystem` (§15.1)? | **`MobCapabilitiesSystem`** (done). The old working name, `MobConditionSystem`, undersold it: it answers for any entity, and it owns pair rules and target vetoes too. The component, vocabularies and events keep their condition names. |
 | Q11 | `BlockMovementComponent` blocks `ChangeDirection` as well as `Move`, but `Immobilized` doesn't (§16.1). Should `Immobilized` block `ChangeDirection`? | No: paralysed legs, chasms and tethers let you turn today. Give `BlockMovement` its own declared pair, `Immobilized` plus a direction lock, or let it declare `Incapacitated` if its users never need hands. Check its prototype users (`pda.yml`, `silicon.yml`, `mothershipcore.yml` and others) first. |
 | Q12 | `PostureLocked` blocks both `Stand` and `Down`, but the cryo pod only cancels `Down` today (§16.1). | Accept it: an occupant of a pod is already upright and can't move, so blocking `Stand` changes nothing observable. |
 | Q13 | Pair rules (§15.3) and target vetoes (§15.4) are not cached. Is that a performance problem? | Not yet. Only a handful of subscribers handle each event, and the hot path (bucket 1) stays cached. Measure before optimizing. |
@@ -954,7 +960,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
    - one PR per bucket area of §16;
    - the movement cache;
    - the call-site migration;
-   - deleting `ActionBlockerSystem`.
+   - removing `ActionBlockerSystem` and the obsolete events, a release after the new API is stable.
 
 Each PR's description links design.md.
 
@@ -1174,14 +1180,23 @@ must therefore call `Refresh`, the same way it calls `UpdateCanMove` today.
      It is the only place that still raises them.
    - Add `MobActionAttemptEvent` and `MobActionTargetAttemptEvent`.
    - Delete `CanShiver` and `CanSweat`.
-2. **Move subscribers out, one §16 row per commit.** When an event has no subscribers left,
-   delete its raise and its type.
+2. **Move subscribers out, one §16 row per commit.** When an event has no upstream subscribers
+   left, mark it `[Obsolete]` and keep raising it until the removal release (§1).
 3. **Move the movement cache** (§15.3) once every `UpdateCanMoveEvent` row has moved.
-4. **Move the ~140 call sites** to the bookkeeper, one PR per area. This is mechanical.
-5. **Delete `ActionBlockerSystem`.**
+4. **Move the ~140 call sites** to the bookkeeper, one PR per area. This is mechanical, and
+   the `[Obsolete]` warnings track what is left.
+5. **Remove `ActionBlockerSystem` and the obsolete events** in a later release, once the new API
+   has been stable for one.
 
 Steps 2–4 can interleave. Step 1 has to come first, because it fixes the direction of the
 dependency: `ActionBlockerSystem` depends on the bookkeeper, never the other way round.
+
+**Done so far:**
+- Step 1.
+- `StandingStateSystem`, knockdown, `PullingSystem` and `SharedPointingSystem` now ask the
+  bookkeeper instead of raising their own attempt events. The bookkeeper therefore subscribes to
+  no attempt event at all. Stand up keeps its in/out event data through a typed `CanStandUp`.
+- All of §16.2.
 
 ### 15.6 Vocabulary changes
 
@@ -1262,11 +1277,19 @@ Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migra
 
 | System | Event today | Rule |
 |---|---|---|
-| `SharedVirtualItemSystem` (`Inventory/VirtualItem/SharedVirtualItemSystem.cs:44`) | GettingInteractedWith | A virtual item can't be interacted with. |
-| `SharedSubFloorHideSystem` (`SubFloor/SharedSubFloorHideSystem.cs:40–41`) | GettingInteractedWith, GettingAttacked | Can't touch or attack things hidden under the floor. Users with `BypassInteractionChecksComponent` are exempt. |
-| `MultiHandedItemSystem` (`Item/MultiHandedItemSystem.cs:19`) | GettingPickedUp | Needs enough free hands. Its popup becomes `Reason`. |
-| `SharedMechSystem.Relay` (`Mech/EntitySystems/SharedMechSystem.Relay.cs:9`) | GettingAttacked | Relays the veto to the pilot. The relay stays inside the handler. |
-| none | `GettingUsedAttemptEvent`, `ThrowItemAttemptEvent` | No subscribers. Deleted in §15.5 step 1. |
+| `SharedVirtualItemSystem` (`Inventory/VirtualItem/SharedVirtualItemSystem.cs:44`) | GettingInteractedWith | **Done.** A virtual item can't be interacted with (`Interact`, `UiAccess`). |
+| `SharedSubFloorHideSystem` (`SubFloor/SharedSubFloorHideSystem.cs:40–41`) | GettingInteractedWith, GettingAttacked | **Done.** Can't touch or attack things hidden under the floor. Users with `BypassInteractionChecksComponent` are exempt from the touching part. |
+| `MultiHandedItemSystem` (`Item/MultiHandedItemSystem.cs:19`) | GettingPickedUp | **Done.** Needs enough free hands. Its popup became `Reason`, which `CanPickup(…, showPopup: true)` shows. |
+| `SharedMechSystem.Relay` (`Mech/EntitySystems/SharedMechSystem.Relay.cs:9`) | GettingAttacked | **Done.** Relays the `Attack` veto to the pilot as `MechPilotRelayedEvent<MobActionTargetAttemptEvent>`. The guardian's relayed handler moved with it. |
+| client `DragDropSystem` (`Content.Client/Interaction/DragDropSystem.cs:521`) | raised GettingInteractedWith by hand for the dragged entity | **Done.** Asks `CanPerform` about the dragged entity instead. |
+| none | `GettingUsedAttemptEvent`, `ThrowItemAttemptEvent` | No subscribers. |
+
+All five typed target events are `[Obsolete]`. The bookkeeper still raises them for downstream
+subscribers (§1).
+
+**One behaviour change:** `CanPickup(…, showPopup: true)` now shows whichever reason blocked
+the pickup. That includes a condition such as "You can't do that while incapacitated", where it
+used to stay silent.
 
 ### 16.3 Bucket 3: pair rules (`MobActionAttemptEvent`)
 
