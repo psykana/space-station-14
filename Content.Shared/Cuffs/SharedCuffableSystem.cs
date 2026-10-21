@@ -70,6 +70,8 @@ namespace Content.Shared.Cuffs
             SubscribeLocalEvent<CuffableComponent, RejuvenateEvent>(OnRejuvenate);
             SubscribeLocalEvent<CuffableComponent, ComponentInit>(OnStartup);
             SubscribeLocalEvent<CuffableComponent, MapInitEvent>(OnMapInit);
+            // Not ComponentShutdown: the client already subscribes to that.
+            SubscribeLocalEvent<CuffableComponent, ComponentRemove>(OnRemove);
             SubscribeLocalEvent<CuffableComponent, AttemptStopPullingEvent>(HandleStopPull);
             SubscribeLocalEvent<CuffableComponent, RemoveCuffsAlertEvent>(OnRemoveCuffsAlert);
             SubscribeLocalEvent<CuffableComponent, UpdateCanMoveEvent>(HandleMoveAttempt);
@@ -96,8 +98,14 @@ namespace Content.Shared.Cuffs
         /// </summary>
         private void OnRefreshConditions(Entity<CuffableComponent> ent, ref RefreshMobConditionsEvent args)
         {
-            if (!ent.Comp.CanStillInteract)
+            // Still subscribed while being removed; the removal refresh must not re-declare.
+            if (!ent.Comp.CanStillInteract && ent.Comp.LifeStage <= ComponentLifeStage.Running)
                 args.Add(MobCondition.Restrained);
+        }
+
+        private void OnRemove(Entity<CuffableComponent> ent, ref ComponentRemove args)
+        {
+            _conditions.Refresh(ent.Owner);
         }
 
         private void OnMapInit(Entity<CuffableComponent> ent, ref MapInitEvent args)

@@ -16,5 +16,5 @@ public sealed partial class CCVars
     /// are stale. Expensive; meant for integration tests.
     /// </summary>
     public static readonly CVarDef<bool> MobConditionsVerify =
-        CVarDef.Create("debug.mob_conditions_verify", false, CVar.SERVERONLY);
+        CVarDef.Create("debug.mob_conditions_verify", false, CVar.SERVER);
 }

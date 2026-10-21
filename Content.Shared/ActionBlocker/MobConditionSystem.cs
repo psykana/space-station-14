@@ -465,7 +465,8 @@ public sealed partial class MobConditionSystem : EntitySystem
     /// </summary>
     private void Verify(Entity<MobConditionsComponent> ent)
     {
-        if (!_verify || !_net.IsServer || _timing.ApplyingState || _polling.Contains(ent))
+        // A deleting entity's producers shut down one by one, so its cache is legitimately behind.
+        if (!_verify || !_net.IsServer || _timing.ApplyingState || _polling.Contains(ent) || TerminatingOrDeleted(ent))
             return;
 
         _polling.Add(ent);
