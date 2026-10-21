@@ -73,6 +73,7 @@ namespace Content.Shared.Interaction
         [Dependency] private TagSystem _tagSystem = default!;
         [Dependency] private UseDelaySystem _useDelay = default!;
         [Dependency] private ActivatableUISystem _activatableUI = default!;
+        [Dependency] private MobConditionSystem _conditions = default!;
 
         [Dependency] private EntityQuery<IgnoreUIRangeComponent> _ignoreUiRangeQuery = default!;
         [Dependency] private EntityQuery<FixturesComponent> _fixtureQuery = default!;
@@ -1139,7 +1140,14 @@ namespace Content.Shared.Interaction
             if (Deleted(uid))
                 return false;
 
-            InteractionActivate(user.Value, uid, checkAccess: ShouldCheckAccess(user.Value));
+            if (!InteractionActivate(user.Value, uid, checkAccess: ShouldCheckAccess(user.Value)) &&
+                !_actionBlockerSystem.CanInteract(user.Value, uid) &&
+                _conditions.TryGetBlockedReason(user.Value, MobAction.Interact, out var reason))
+            {
+                // Tell the player why nothing happened, if it was one of their conditions.
+                _popupSystem.PopupClient(reason, uid, user.Value);
+            }
+
             return false;
         }
 

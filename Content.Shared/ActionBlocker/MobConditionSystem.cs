@@ -138,9 +138,12 @@ public sealed partial class MobConditionSystem : EntitySystem
     }
 
     /// <summary>
-    /// Every declared condition that would block <paramref name="action"/> on its own.
+    /// Every declared condition that would block <paramref name="action"/> on its own, once
+    /// <paramref name="ignoring"/> is forgiven.
     /// </summary>
-    public static MobCondition GetBlockingConditions(MobCondition declared, MobAction action)
+    public static MobCondition GetBlockingConditions(MobCondition declared,
+        MobAction action,
+        MobCondition ignoring = MobCondition.None)
     {
         var result = MobCondition.None;
 
@@ -150,7 +153,7 @@ public sealed partial class MobConditionSystem : EntitySystem
             if ((declared & condition) == 0)
                 continue;
 
-            if ((GetBlocked(Expand(condition)) & action) != 0)
+            if ((GetBlocked(Effective(condition, ignoring)) & action) != 0)
                 result |= condition;
         }
 
@@ -273,22 +276,28 @@ public sealed partial class MobConditionSystem : EntitySystem
     }
 
     /// <summary>
-    /// Every declared condition that blocks <paramref name="action"/> on its own.
+    /// Every declared condition that blocks <paramref name="action"/> on its own, once <paramref name="ignoring"/>
+    /// is forgiven.
     /// </summary>
-    public MobCondition GetBlockingConditions(Entity<MobConditionsComponent?> ent, MobAction action)
+    public MobCondition GetBlockingConditions(Entity<MobConditionsComponent?> ent,
+        MobAction action,
+        MobCondition ignoring = MobCondition.None)
     {
         if (!_query.Resolve(ent, ref ent.Comp, false))
             return MobCondition.None;
 
-        return GetBlockingConditions(ent.Comp.Declared, action);
+        return GetBlockingConditions(ent.Comp.Declared, action, ignoring);
     }
 
     /// <summary>
     /// Gets a localized "you can't do that while ..." message for why <paramref name="action"/> is blocked.
     /// </summary>
-    public bool TryGetBlockedReason(Entity<MobConditionsComponent?> ent, MobAction action, out string reason)
+    public bool TryGetBlockedReason(Entity<MobConditionsComponent?> ent,
+        MobAction action,
+        out string reason,
+        MobCondition ignoring = MobCondition.None)
     {
-        var condition = PickReason(GetBlockingConditions(ent, action));
+        var condition = PickReason(GetBlockingConditions(ent, action, ignoring));
         if (condition == MobCondition.None)
         {
             reason = string.Empty;
