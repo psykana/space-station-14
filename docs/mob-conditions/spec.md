@@ -967,8 +967,19 @@ A demo implements a vertical slice of the model, one commit per step.
 - the MobState, Stun and Cuffs producers;
 - self-uncuff (§9.1);
 - the UI tiers and paper read-only (§8);
-- the unconscious close sweep;
-- failure reasons (§10.2) for self-uncuff and the activate key.
+- the close sweep: `GetUiStatus` returns `Close` for an unconscious user, and the sweep closes any
+  open UI whose status is `Close`;
+- failure reasons (§10.2) for self-uncuff and the activate key, through
+  `CanPerform(..., out reason)`;
+- §15.5 step 1 (forwarding):
+  - The `ActionBlockerSystem` bodies live in the bookkeeper (`MobConditionSystem.Actions.cs`),
+    and `ActionBlockerSystem` only forwards to it.
+  - The bookkeeper checks conditions directly, and still subscribes only to the events raised
+    elsewhere (Stand, StandUp, StartPull, Point).
+  - `MobActionAttemptEvent` and `MobActionTargetAttemptEvent` are raised but have no subscribers
+    yet.
+  - The `InteractionAttemptEvent.Ignoring` field and `CanShiver`/`CanSweat` are gone.
+  - `MobConditionsChangedEvent` is also raised broadcast.
 
 **Deliberately not implemented yet:**
 - **Spectators** keep today's access. `GetUiStatus` closes `RequiresComplex` UIs to ghosts until the §8.5 audit is done.
