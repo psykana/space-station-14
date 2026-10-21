@@ -514,6 +514,9 @@ path, and the surrounding suites passed.
 It has not been rebased. [spec.md](spec.md) lists the drift since then and is the reference for
 re-implementing it.
 
+A fresh demo now covers three producers (MobState, Stun, Cuffs) and three consumers (self-uncuff, paper
+read-only with the UI tiers, failure popups). Spec §12 "Demo status" lists what it leaves out.
+
 The spec was reviewed adversarially against `6a9a8abe96` on 2026-10-20 (spec Appendix B). The
 review changed the stored state, the ignore-mask semantics, the UI tiers and the close policy.
 Those parts of the prototype are superseded and shouldn't be copied.

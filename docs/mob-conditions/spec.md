@@ -937,6 +937,23 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 
 Each PR's description links design.md.
 
+### Demo status (branch `mob-conditions`)
+
+A demo implements a vertical slice of the model, one commit per step.
+
+**Implemented:**
+- the core (§2–5), including the §4.5 verify cvar, which is on in integration tests;
+- the MobState, Stun and Cuffs producers;
+- self-uncuff (§9.1);
+- the UI tiers and paper read-only (§8);
+- the unconscious close sweep;
+- failure reasons (§10.2) for self-uncuff and the activate key.
+
+**Deliberately not implemented yet:**
+- **Spectators** keep today's access. `GetUiStatus` closes `RequiresComplex` UIs to ghosts until the §8.5 audit is done.
+- **`InHandsOnly`** is still checked at every tier (§11 Q8).
+- **Not migrated:** the action-bar `Requires` (§7), the EntityCondition bridge (§10.1), and the Ghost, Knockdown, Sleeping and LegsParalyzed producers. The §6.3 sources aren't migrated either. Their attempt events work as before.
+
 ## 13. Tests
 
 Two kinds of test:
