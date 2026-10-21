@@ -159,24 +159,46 @@ This recomputes from the declared set minus `Restrained`, which is exactly tg's
 `INCAPACITATED_IGNORING`. Forgiving restraint unblocks a handcuffed mob but not an unconscious
 one, because unconsciousness re-derives `HandsBlocked` on its own.
 
-**The component** has two flag fields and nothing else, because it sits on every mob:
+The mask is applied before the cascade *and* after it: `Expand(declared & ~ignoring) & ~ignoring`.
+- Before the cascade, forgiving `Restrained` also forgives the `HandsBlocked` it implies.
+- After the cascade, forgiving a derived condition works too. `Ignoring = HandsBlocked`
+  tolerates every hands-only cause.
+- With a single pass, the second case would silently do nothing, because `Restrained` would
+  re-derive `HandsBlocked`.
+
+**The component** stores the declared set, pre-cascade, and nothing else of its own, because it
+sits on every mob:
 
 ```csharp
 public sealed partial class MobConditionsComponent : Component
 {
-    [AutoNetworkedField] public MobCondition Conditions;  // declared + cascaded
-    [AutoNetworkedField] public MobAction Blocked;        // derived
+    [AutoNetworkedField] public MobCondition Declared;  // union of producer Adds
+    public MobCondition Conditions;                     // Expand(Declared), recomputed on state
+    public MobAction Blocked;                           // GetBlocked(Conditions), recomputed on state
 }
 ```
 
+Storing `Declared` rather than the expanded set is what makes ignore masks cheap. Forgiving a
+condition is bit math on a stored field, so no source is ever re-polled on a hot path. It also
+gives the client the same answer as the server: a client could only re-poll the sources it can
+see.
+
 **Multiple sources need no refcounts.** `MobConditionSystem.Refresh` raises
-`RefreshMobConditionsEvent` and re-polls every source. Nothing is stored between refreshes, so
-a source that stops applying simply stops declaring. Waking up while still cuffed unblocks
-nothing, because the cuffs re-declare on the same refresh.
+`RefreshMobConditionsEvent` and re-polls every source. Only the union is stored, so a source
+that stops applying simply stops declaring on the next refresh. Waking up while still cuffed
+unblocks nothing, because the cuffs re-declare on the same refresh.
 
 This is tg's sourced traits, expressed the way SS14 already handles multi-source state: the
 same poll-and-cache shape as `ActionBlockerSystem.UpdateCanMove` and
 `RefreshMovementSpeedModifiers`.
+
+The price of a cache is that every producer must refresh it at the right moment. Today the
+blockers are evaluated live, so a stale value can't happen. Spec §6.1 makes "refresh before
+anything else runs" a rule, and spec §4.5 asserts it in every integration test.
+
+`UiBlocked` and `PullBlocked` only come from the cascade. Today they block nothing that
+`Interact` doesn't already block: `CanPull` and the BUI gate both call `CanInteract`. They are
+kept for tg parity, and so that a call site can forgive them on their own.
 
 ## 4. What producers look like
 
@@ -211,16 +233,32 @@ if (!ent.Comp.CanGhostInteract)
     args.Add(MobCondition.Incorporeal);
 ```
 
-Ghosts are a special case. `GetUiStatus` resolves them *before* consulting conditions, so
-`Incorporeal` never affects UI access and a spectator still gets `ReadOnly`. `Incorporeal`
-governs everything else, so a ghost still can't pick things up or emote.
+Ghosts are a special case. `GetUiStatus` resolves spectators (ghosts with `!CanGhostInteract`)
+*before* consulting conditions, so `Incorporeal` never affects UI access and a spectator still
+gets `ReadOnly`. `Incorporeal` governs everything else, so a ghost still can't pick things up or
+emote. Admin ghosts have `CanGhostInteract`, so they declare nothing and are judged like anyone
+else.
 
 The `LifeStage` guard matters. A component is still subscribed while it is being removed, so
 without the guard, the refresh that wakes a mob would re-declare unconsciousness.
 `SleepingSystem` already uses this idiom in `OnSeeAttempt`.
 
+When the refresh happens matters as much as the guard.
+- `SleepingSystem` reacts in `ComponentRemove`, and its wake handler immediately calls
+  `TryUnstun` and `TryStanding` (`SleepingSystem.cs:142–164`). The refresh has to come first, or
+  `TryStanding` reads a cache that still says the mob is unconscious.
+- Every producer has an anchor like this, listed in spec §6.2.
+
 Because standing consults one cached value, `StandAttemptEvent` and `StandUpAttemptEvent` now
-give the same answer without any change to knockdown's logic.
+agree with each other without any change to knockdown's logic.
+
+The slice-1 producers preserve today's behaviour, with one exception (spec §3.2). Each mapping
+was checked against the events it replaces.
+- **The exception:** `Unconscious` also blocks `StandUp`, which MobState never cancelled. A mob
+  knocked down while crit now keeps its knockdown until it is revived, and then recovers
+  normally.
+- **Cuffs:** the cascade adds `Pull`, which cuffs never blocked through the event. `CanPull`
+  already refuses through `CanInteract`, so this changes nothing in practice.
 
 ### Handlers that deliberately stay
 
@@ -248,16 +286,33 @@ speak" popups. That ordering must move to `MobConditionSystem` along with Speak.
 public enum UiStatus : sbyte { Close = -1, Disabled = 0, ReadOnly = 1, Interactive = 2 }
 ```
 
-`ActivatableUISystem.GetUiStatus` resolves access in this order. A missing
-`ActivatableUIComponent` just means there is no per-UI policy.
+`ActivatableUISystem.GetUiStatus(user, target, key)` resolves access in this order.
+- **The key matters.** Today the ActivatableUI policy applies only to the BUI key it names, and
+  other BUIs on the same entity are gated by `CanInteract` alone.
+- A missing `ActivatableUIComponent`, or one for a different key, just means there is no
+  per-UI policy.
 
-1. **Ghost.** An admin gets `Interactive`. Anyone else gets `ReadOnly`, unless
-   `BlockSpectators` is set. Observing is a spectator rule rather than a mob capability, so it
-   resolves before any condition is consulted; tg does the same (`states.dm:25`).
-2. **`AdminOnly` without admin rights** → `Close`.
-3. **`UiAccess` (plus `RequiresComplex`) passes** → `Interactive`.
-4. **Retry, forgiving the UI's `ReadOnlyConditions`.** If that passes → `ReadOnly`.
-5. **Otherwise** → `Close`.
+1. **Spectator** (a ghost without `CanGhostInteract`): `ReadOnly`, unless `BlockSpectators` is
+   set. Observing is a spectator rule rather than a mob capability, so it resolves before any
+   condition is consulted; tg does the same (`states.dm:25`).
+   - It keys on `CanGhostInteract`, not admin rights, so an admin watching as an ordinary
+     ghost is still a spectator.
+   - Admin ghosts fall through to the normal rules.
+2. **`AdminOnly` without admin rights**: `Close`.
+3. **`RequiresComplex` without `ComplexInteractionComponent`**: `Close`. This is a creature
+   property, not a condition.
+4. **`UiAccess` passes**: `Interactive`.
+5. **Retry, forgiving the UI's `ReadOnlyConditions`.** If that passes: `ReadOnly`.
+6. **Otherwise**: `Disabled`. The user could use it in principle, but their conditions block it
+   right now.
+
+`Close` and `Disabled` both refuse to open and refuse input. They differ for a window that is
+already open:
+- **Unconscious:** the window is closed.
+- **Stunned or cuffed:** it stays open at `Disabled` and ignores input until the user recovers.
+
+That is today's behaviour; nothing in SS14 closes UIs on stun or cuffs now. A 2-second stun
+shouldn't throw away a console window.
 
 Enforcement stays where upstream already put it:
 - `SharedInteractionSystem.OnBoundInterfaceInteractAttempt` (`:150`) hooks the engine's
@@ -265,14 +320,33 @@ Enforcement stays where upstream already put it:
 - The tier gate replaces only the `CanInteract`/ghost special case (`:154–164`) and the
   `RequiresComplex` check (`:193`): `Open` is allowed at `>= ReadOnly`, and every other message
   requires `Interactive`.
-- The range cancel (`:168`, made a hard cancel by #46045), the accessibility check and the
-  single-user check stay as they are.
+- The range cancel (`:168`, made a hard cancel by #46045) and the accessibility check stay as
+  they are.
+- The single-user lock applies only to interactive users. A spectator never holds it, so a ghost
+  can't lock the crew out of a console.
 - `ActivatableUISystem.OnBoundInterfaceOpenAttempt` (`:184`, also #46045) keeps its
   open-attempt veto. Every hook only cancels, so no ordering between them is needed.
 
 This is tg's rule that "`ui_act` requires `UI_INTERACTIVE`". Read-only is authoritative on the
-server, not a client courtesy. `ActivatableUIStatusSystem` closes open UIs when
-`MobConditionsChangedEvent` reports that the mob got worse off.
+server, not a client courtesy. `ActivatableUIStatusSystem` closes open UIs only when the mob
+becomes unconscious. It skips BUIs that opted out of input validation, such as borg laws and
+vending machines.
+
+**Ghosts inspect; they don't use.** Opening a UI is not free of side effects:
+- triggers fire with the opener as user;
+- shuttle consoles make the opener a pilot;
+- arcade machines seat a player;
+- the power monitor resets a focus that every viewer shares;
+- paper resets its shared write mode.
+
+So a read-only open has to be visible to the systems that react to it.
+`Before/AfterActivatableUIOpenEvent` carry the `UiStatus`, and `IsInteractiveViewer` serves the
+`BoundUIOpenedEvent` handlers. Each side-effect handler decides whether to skip, allow, or
+treat the viewer as a spectator. Spec §8.5 lists every current handler and its required
+behaviour.
+
+On the client, a window MAY call the shared `GetUiStatus` to render an inspect mode. Until it
+does, a spectator sees normal controls that the server ignores.
 
 ```yaml
 - type: ActivatableUI
@@ -280,6 +354,10 @@ server, not a client courtesy. `ActivatableUIStatusSystem` closes open UIs when
   requiresComplex: false
   readOnlyConditions: Restrained   # cuffed users read; writes are rejected
 ```
+
+A cuffed reader opens paper through the activate key or the verb. The read-only carve-out
+calls the UI system directly, so the entity's other activation handlers don't run for a user
+whose blockers just failed.
 
 A mouse still can't open a computer: it lacks `ComplexInteractionComponent`, and
 `RequiresComplex` remains a hard `Close`. Creature properties stay components; this system
@@ -329,10 +407,13 @@ The two systems then meet at a small seam:
 
 **A capability enum owned per mob** (`Base` + `Current` sets of things a mob *can* do).
 - It bloated immediately once creature properties like writing and literacy were folded in.
-- A central `[Flags]` enum is hostile to a fork ecosystem: every downstream fork edits the same
-  bits, and every upstream merge conflicts.
+- A central `[Flags]` enum that keeps *growing* is hostile to a fork ecosystem: every downstream
+  fork adds bits in the same place, and every upstream merge conflicts.
+- The chosen `MobCondition` and `MobAction` are also central enums. What makes them acceptable
+  is that they are closed: they track `ActionBlockerSystem`'s own API, and tg's equivalents
+  haven't changed in years.
 - The mistake was conflating action verbs with creature properties. Separating them removes
-  the pressure entirely.
+  the pressure to grow.
 
 **Prototype-identified capabilities** (`ProtoId<CapabilityPrototype>` sets, like
 `TagComponent`).
@@ -363,6 +444,11 @@ restraint.
   KitchenSpike, BeingDisposed, the Brain/Borg `Point` blocks, Worm `StandUp`, and the Chasm and
   TetherGun movement blocks. They are listed in spec §6.3 as later slices. Until they migrate,
   the attempt events keep working exactly as they do today.
+  - Unlike slice 1, most of these are *not* parity. No closed condition matches their
+    hand-picked event sets.
+  - Examples: a frozen player would also lose `Drop`, and a spiked mob would lose `Interact`.
+  - Spec §6.3 lists each delta. Each one ships as a stated gameplay change, or keeps a residual
+    event.
 - **Status effects.** Stun, knockdown and sleep are hybrids: a status effect ensures a mob-side
   component, and that component is the condition source. The `KnockdownStatusEffect` also pins
   `StandUp` directly through a relay (`SharedStunSystem.cs:69/371`). Whether
@@ -392,10 +478,23 @@ restraint.
 - **Blocking depends on the component being present.** Blocking now depends on
   `MobConditionsComponent` existing. Every producer `EnsureComp`s it rather than relying on
   every mob prototype inheriting it from `MobDamageable`.
-- **Prediction.** All migrated producers are shared, so client and server derive the same
-  conditions. On the client, conditions arrive through the networked fields: `Refresh` skips
-  while `ApplyingState`, and `MobStateChangedEvent` is no longer raised client-side (since
-  `0f46f12599`).
+- **Stale cache.** Today every blocker is evaluated live. After the change, a producer that
+  forgets to refresh, or refreshes too late, leaves a mob wrongly blocked or wrongly free.
+  - The same goes for a field that is changed without its setter, for example through VV.
+  - Spec §6.1 requires a refresh before anything downstream runs, and setters that refresh.
+  - Spec §4.5 adds a test-time assertion that the cache matches a fresh poll.
+- **Prediction.** Every producer MUST be shared and read only networked state. The client
+  receives `Declared` through the network: `Refresh` skips while `ApplyingState`, and the
+  derived fields are recomputed when the state is applied.
+  - A server-only source would vanish from the client's view on the next predicted refresh.
+    That is why `BrainComponent` (not networked) and `DnaImprint` (server-only) stay attempt
+    events.
+  - `MobStateChangedEvent` is still raised on the client, but only through predicted damage
+    thresholds. After `0f46f12599` it is not a reliable client signal, and nothing here depends
+    on it.
+- **Handlers that un-cancel.** Ignore masks assume every attempt handler only ever cancels.
+  `SharedStationAiSystem.OnHeldInteraction` (`SharedStationAiSystem.Held.cs:151`) instead assigns
+  `Cancelled`, so it can undo an earlier cancel. The Core PR fixes it.
 - **Re-entrancy.** `VehicleSystem.CanOperate` (`:315`) calls `CanInteract` from inside an
   `UpdateCanMoveEvent` handler. That handler runs during `Refresh`. It is safe only because
   `Refresh` commits the new state *before* calling `UpdateCanMove`, and the spec makes that an
@@ -414,3 +513,7 @@ path, and the surrounding suites passed.
 
 It has not been rebased. [spec.md](spec.md) lists the drift since then and is the reference for
 re-implementing it.
+
+The spec was reviewed adversarially against `6a9a8abe96` on 2026-10-20 (spec Appendix B). The
+review changed the stored state, the ignore-mask semantics, the UI tiers and the close policy.
+Those parts of the prototype are superseded and shouldn't be copied.
