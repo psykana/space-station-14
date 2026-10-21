@@ -126,9 +126,9 @@ namespace Content.Shared.Cuffs
                 return;
             }
 
-            // If the user is the target, special logic applies.
-            // This is because the CanInteract blocking of the cuffs prevents self-uncuff.
-            var ignoring = MobCondition.None;
+            var req = new InteractionRequirements();
+
+            // Uncuffing yourself forgives the restraint itself, but nothing else: a stunned or unconscious mob still can't.
             if (args.User == args.Target)
             {
                 if (!HasComp<CuffableComponent>(args.User))
@@ -137,26 +137,15 @@ namespace Content.Shared.Cuffs
                     return;
                 }
 
-                // Forgive the restraint itself, but nothing else: a stunned or unconscious mob still can't.
-                ignoring = MobCondition.Restrained;
-                var req = new InteractionRequirements { Ignoring = ignoring };
-                if (!_actionBlocker.CanInteract(args.User, args.User, req))
-                    args.Cancelled = true;
-            }
-            else
-            {
-                // Check if the user can interact.
-                if (!_actionBlocker.CanInteract(args.User, args.Target))
-                    args.Cancelled = true;
+                req.Ignoring = MobCondition.Restrained;
             }
 
-            if (args.Cancelled)
+            if (!_conditions.CanPerform(args.User, req, args.Target, null, out var reason))
             {
-                // Say why, if one of the user's conditions is the reason.
-                if (!_conditions.TryGetBlockedReason(args.User, MobAction.Interact, out var message, ignoring))
-                    message = Loc.GetString("cuffable-component-cannot-interact-message");
-
-                _popup.PopupEntity(message, args.Target, args.User);
+                args.Cancelled = true;
+                _popup.PopupEntity(reason ?? Loc.GetString("cuffable-component-cannot-interact-message"),
+                    args.Target,
+                    args.User);
             }
         }
 

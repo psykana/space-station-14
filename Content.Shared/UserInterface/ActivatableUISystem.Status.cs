@@ -22,39 +22,34 @@ public sealed partial class ActivatableUISystem
                 return UiStatus.Close;
 
             // TODO MOB CONDITIONS: let spectators inspect complex UIs once opening them has no side effects.
-            if (comp?.RequiresComplex == true && !_blockerSystem.CanComplexInteract(user))
+            if (comp?.RequiresComplex == true && !_conditions.CanComplexInteract(user))
                 return UiStatus.Close;
 
             return UiStatus.ReadOnly;
         }
 
+        // An unconscious mind can't have a UI open at all, unlike a stunned or restrained one.
+        if (_conditions.HasCondition(user, MobCondition.Unconscious))
+            return UiStatus.Close;
+
         if (comp?.AdminOnly == true && !_adminManager.IsAdmin(user))
             return UiStatus.Close;
 
-        if (comp?.RequiresComplex == true && !_blockerSystem.CanComplexInteract(user))
+        if (comp?.RequiresComplex == true && !_conditions.CanComplexInteract(user))
             return UiStatus.Close;
 
         var req = new InteractionRequirements { Action = MobAction.UiAccess };
-        if (_blockerSystem.CanInteract(user, target, req))
+        if (_conditions.CanPerform(user, req, target))
             return UiStatus.Interactive;
 
         if (comp != null && comp.ReadOnlyConditions != MobCondition.None)
         {
             req.Ignoring = comp.ReadOnlyConditions;
-            if (_blockerSystem.CanInteract(user, target, req))
+            if (_conditions.CanPerform(user, req, target))
                 return UiStatus.ReadOnly;
         }
 
         return UiStatus.Disabled;
-    }
-
-    /// <summary>
-    /// Whether <paramref name="actor"/> may use, not just look at, the UI. For <see cref="BoundUIOpenedEvent"/>
-    /// handlers with side effects, which must not apply them for read-only viewers.
-    /// </summary>
-    public bool IsInteractiveViewer(EntityUid uiEntity, Enum key, EntityUid actor)
-    {
-        return GetUiStatus(actor, uiEntity, key) == UiStatus.Interactive;
     }
 
     /// <summary>

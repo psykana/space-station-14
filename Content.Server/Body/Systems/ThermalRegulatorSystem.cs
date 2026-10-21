@@ -1,6 +1,5 @@
 using Content.Server.Body.Components;
 using Content.Server.Temperature.Systems;
-using Content.Shared.ActionBlocker;
 using Content.Shared.Temperature.Components;
 using Content.Shared.Mobs.Systems;
 using Robust.Shared.Timing;
@@ -11,7 +10,6 @@ public sealed partial class ThermalRegulatorSystem : EntitySystem
 {
     [Dependency] private IGameTiming _gameTiming = default!;
     [Dependency] private TemperatureSystem _tempSys = default!;
-    [Dependency] private ActionBlockerSystem _actionBlockerSys = default!;
     [Dependency] private MobStateSystem _mobState = default!;
 
     public override void Initialize()
@@ -87,16 +85,10 @@ public sealed partial class ThermalRegulatorSystem : EntitySystem
 
         if (ent.Comp2.Temperature > ent.Comp1.NormalBodyTemperature)
         {
-            if (!_actionBlockerSys.CanSweat(ent))
-                return;
-
             _tempSys.ChangeHeat((ent, ent.Comp2), -Math.Min(targetHeat, ent.Comp1.SweatHeatRegulation), ignoreHeatResistance: true);
         }
         else
         {
-            if (!_actionBlockerSys.CanShiver(ent))
-                return;
-
             _tempSys.ChangeHeat((ent, ent.Comp2), Math.Min(targetHeat, ent.Comp1.ShiveringHeatRegulation), ignoreHeatResistance: true);
         }
     }

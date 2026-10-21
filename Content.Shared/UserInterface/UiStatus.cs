@@ -6,7 +6,8 @@ namespace Content.Shared.UserInterface;
 public enum UiStatus : sbyte
 {
     /// <summary>
-    /// A policy denial (admin-only, spectators blocked, not complex enough). Can't open, can't use.
+    /// Can't have the UI at all: unconscious, or a policy denial (admin-only, spectators blocked, not complex enough).
+    /// An open window is closed.
     /// </summary>
     Close = -1,
 

@@ -129,14 +129,14 @@ public sealed class MobConditionTest : InteractionTest
         await Server.WaitAssertion(() =>
         {
             Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
-            Assert.That(_sBlocker.CanInteract(SPlayer, null, ForgiveRestraint), Is.True);
+            Assert.That(_sConditions.CanPerform(SPlayer, ForgiveRestraint), Is.True);
         });
 
         await SetMobState(MobState.Critical);
 
         await Server.WaitAssertion(() =>
         {
-            Assert.That(_sBlocker.CanInteract(SPlayer, null, ForgiveRestraint), Is.False,
+            Assert.That(_sConditions.CanPerform(SPlayer, ForgiveRestraint), Is.False,
                 "Forgiving restraint must not forgive unconsciousness.");
         });
     }
@@ -206,7 +206,7 @@ public sealed class MobConditionTest : InteractionTest
                 Assert.That(_sBlocker.CanMove(SPlayer), Is.False);
                 Assert.That(_sBlocker.CanSpeak(SPlayer), Is.True);
                 Assert.That(_sConditions.IsBlocked(SPlayer, MobAction.Point), Is.False);
-                Assert.That(_sBlocker.CanInteract(SPlayer, null, ForgiveRestraint), Is.False);
+                Assert.That(_sConditions.CanPerform(SPlayer, ForgiveRestraint), Is.False);
             });
         });
 

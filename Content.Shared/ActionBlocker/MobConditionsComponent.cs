@@ -45,10 +45,12 @@ public record struct RefreshMobConditionsEvent
 }
 
 /// <summary>
-/// Raised on a mob after its cascaded conditions changed, once the new state has been committed.
+/// Raised on a mob, and broadcast, after its cascaded conditions changed, once the new state has been committed.
+/// Subscribe directed on your own component, or to the broadcast. Don't subscribe directed on
+/// <see cref="MobConditionsComponent"/>: only one system may hold that subscription.
 /// </summary>
 [ByRefEvent]
-public readonly record struct MobConditionsChangedEvent(MobCondition Old, MobCondition New)
+public readonly record struct MobConditionsChangedEvent(EntityUid Uid, MobCondition Old, MobCondition New)
 {
     public MobCondition Added => New & ~Old;
     public MobCondition Removed => Old & ~New;

@@ -1,16 +1,9 @@
 using Content.Shared.CCVar;
 using Content.Shared.Damage.ForceSay;
-using Content.Shared.Emoting;
-using Content.Shared.Hands;
-using Content.Shared.Interaction.Events;
-using Content.Shared.Item;
-using Content.Shared.Movement.Events;
 using Content.Shared.Pointing;
 using Content.Shared.Pulling.Events;
-using Content.Shared.Speech;
 using Content.Shared.Standing;
 using Content.Shared.Stunnable;
-using Content.Shared.Throwing;
 using Robust.Shared.Configuration;
 using Robust.Shared.Network;
 using Robust.Shared.Timing;
@@ -18,13 +11,13 @@ using Robust.Shared.Timing;
 namespace Content.Shared.ActionBlocker;
 
 /// <summary>
-/// Owns the decision of what a mob can do. Producers declare <see cref="MobCondition"/>s through
-/// <see cref="RefreshMobConditionsEvent"/>; this system cascades them, maps them to blocked
-/// <see cref="MobAction"/>s and cancels the corresponding attempt events.
+/// The bookkeeper: owns the decision of what an entity can do, and is replacing <see cref="ActionBlockerSystem"/>.
+/// Producers declare <see cref="MobCondition"/>s through <see cref="RefreshMobConditionsEvent"/>; this system
+/// cascades them and maps them to blocked <see cref="MobAction"/>s. Consumers ask
+/// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/>.
 /// </summary>
 public sealed partial class MobConditionSystem : EntitySystem
 {
-    [Dependency] private ActionBlockerSystem _blocker = default!;
     [Dependency] private IConfigurationManager _cfg = default!;
     [Dependency] private IGameTiming _timing = default!;
     [Dependency] private INetManager _net = default!;
@@ -219,12 +212,13 @@ public sealed partial class MobConditionSystem : EntitySystem
         Dirty(ent);
 
         if (((oldBlocked ^ ent.Comp.Blocked) & MobAction.Move) != 0)
-            _blocker.UpdateCanMove(ent);
+            UpdateCanMove(ent);
 
         if (oldConditions != ent.Comp.Conditions)
         {
-            var ev = new MobConditionsChangedEvent(oldConditions, ent.Comp.Conditions);
-            RaiseLocalEvent(ent, ref ev);
+            // Broadcast too: only one system may subscribe to a directed event per component.
+            var ev = new MobConditionsChangedEvent(ent, oldConditions, ent.Comp.Conditions);
+            RaiseLocalEvent(ent, ref ev, true);
         }
     }
 
@@ -326,26 +320,15 @@ public sealed partial class MobConditionSystem : EntitySystem
 
         // Producers may have recomputed CanMove earlier in this state application, against the stale cache.
         if (((oldBlocked ^ ent.Comp.Blocked) & MobAction.Move) != 0)
-            _blocker.UpdateCanMove(ent);
+            UpdateCanMove(ent);
     }
 
     #endregion
 
     #region Attempt events
 
-    [SubscribeLocalEvent]
-    private void OnInteractionAttempt(Entity<MobConditionsComponent> ent, ref InteractionAttemptEvent args)
-    {
-        if (IsBlocked((ent, ent.Comp), MobAction.Interact, args.Ignoring))
-            args.Cancelled = true;
-    }
-
-    [SubscribeLocalEvent]
-    private void OnConsciousAttempt(Entity<MobConditionsComponent> ent, ref ConsciousAttemptEvent args)
-    {
-        if (IsBlocked((ent, ent.Comp), MobAction.Conscious))
-            args.Cancelled = true;
-    }
+    // Events raised outside the bookkeeper still need cancelling. Everything ActionBlockerSystem used to raise is
+    // checked directly in CanPerform instead.
 
     [SubscribeLocalEvent]
     private void OnStandUpAttempt(Entity<MobConditionsComponent> ent, ref StandUpAttemptEvent args)
@@ -355,67 +338,9 @@ public sealed partial class MobConditionSystem : EntitySystem
     }
 
     [SubscribeLocalEvent]
-    private void OnSpeakAttempt(EntityUid uid, MobConditionsComponent comp, SpeakAttemptEvent args)
-    {
-        if (!IsBlocked((uid, comp), MobAction.Speak))
-            return;
-
-        // Last words: a one-shot grant with a timeout, so not something an ignore mask can express.
-        if (_critSpeechQuery.HasComp(uid))
-        {
-            RemCompDeferred<AllowNextCritSpeechComponent>(uid);
-            return;
-        }
-
-        args.Cancel();
-    }
-
-    [SubscribeLocalEvent]
-    private void OnUseAttempt(EntityUid uid, MobConditionsComponent comp, UseAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.UseHeld, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnPickupAttempt(EntityUid uid, MobConditionsComponent comp, PickupAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Pickup, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnDropAttempt(EntityUid uid, MobConditionsComponent comp, DropAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Drop, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnAttackAttempt(EntityUid uid, MobConditionsComponent comp, AttackAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Attack, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnThrowAttempt(EntityUid uid, MobConditionsComponent comp, ThrowAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Throw, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnEmoteAttempt(EntityUid uid, MobConditionsComponent comp, EmoteAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Emote, args);
-    }
-
-    [SubscribeLocalEvent]
     private void OnPointAttempt(EntityUid uid, MobConditionsComponent comp, PointAttemptEvent args)
     {
         CancelIfBlocked((uid, comp), MobAction.Point, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnUpdateCanMove(EntityUid uid, MobConditionsComponent comp, UpdateCanMoveEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Move, args);
     }
 
     [SubscribeLocalEvent]
@@ -428,12 +353,6 @@ public sealed partial class MobConditionSystem : EntitySystem
     private void OnStartPullAttempt(EntityUid uid, MobConditionsComponent comp, StartPullAttemptEvent args)
     {
         CancelIfBlocked((uid, comp), MobAction.Pull, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnChangeDirectionAttempt(EntityUid uid, MobConditionsComponent comp, ChangeDirectionAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.ChangeDirection, args);
     }
 
     private void CancelIfBlocked(Entity<MobConditionsComponent> ent, MobAction action, CancellableEntityEventArgs args)

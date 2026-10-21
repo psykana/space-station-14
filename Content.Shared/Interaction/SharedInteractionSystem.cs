@@ -155,10 +155,6 @@ namespace Content.Shared.Interaction
         /// </remarks>
         private void OnBoundInterfaceInteractAttempt(Entity<UserInterfaceComponent> ent, ref BoundUserInterfaceMessageAttempt ev)
         {
-            // Closing must always succeed.
-            if (ev.Message is CloseBoundInterfaceMessage)
-                return;
-
             _uiQuery.TryComp(ev.Target, out var aUiComp);
 
             var status = _activatableUI.GetUiStatus(ev.Actor, (ev.Target, aUiComp), ev.UiKey);
@@ -1141,10 +1137,10 @@ namespace Content.Shared.Interaction
                 return false;
 
             if (!InteractionActivate(user.Value, uid, checkAccess: ShouldCheckAccess(user.Value)) &&
-                !_actionBlockerSystem.CanInteract(user.Value, uid) &&
-                _conditions.TryGetBlockedReason(user.Value, MobAction.Interact, out var reason))
+                !_conditions.CanPerform(user.Value, new InteractionRequirements(), uid, null, out var reason) &&
+                reason != null)
             {
-                // Tell the player why nothing happened, if it was one of their conditions.
+                // Tell the player why nothing happened, if whatever blocked them said.
                 _popupSystem.PopupClient(reason, uid, user.Value);
             }
 

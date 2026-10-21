@@ -105,9 +105,6 @@ public abstract partial class SharedStunSystem : EntitySystem
             Conditions.EnsureConditions(uid);
 
         Conditions.Refresh(uid);
-
-        // Refresh does nothing while applying a server state, but the client still needs CanMove recomputed here.
-        Blocker.UpdateCanMove(uid);
     }
 
     private void OnStunOnContactCollide(Entity<StunOnContactComponent> ent, ref StartCollideEvent args)
