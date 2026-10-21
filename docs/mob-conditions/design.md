@@ -4,6 +4,11 @@ This doc covers how SS14 decides what a mob can do, why that needs to change, an
 proposed to replace it. The model is adapted from tgstation's condition/trait architecture
 rather than ported from it.
 
+**The end goal** is one bookkeeper system that replaces `ActionBlockerSystem`. Producers tell it
+what is wrong with an entity, consumers ask it what the entity can do, and nothing else decides.
+The conditions model below is its core. Spec §15 describes the end state, and spec §16 sorts
+every current attempt-event subscriber into the bucket it moves to.
+
 The normative details (types, tables, migration steps, tests) are in [spec.md](spec.md).
 This document is the rationale. All code citations are against upstream `6a9a8abe96`
 (2026-10-20).
@@ -462,13 +467,19 @@ restraint.
   - The natural next step is a `Hear` action plus a recipient filter there, with tg's "you can
     almost hear something" flavour for the muffled case.
   - Put the check behind a component query so the healthy-crew path stays allocation-free.
-- **Buckle and pacification are deliberately not migrated.**
-  - Buckle pins posture in *both* directions: it cancels `DownAttemptEvent` as well as
-    `StandAttemptEvent`. Migrating it would need a `Down` action that exists for one consumer.
-    tg itself special-cases buckle in `on_floored_trait_gain` rather than folding it into the
-    cascade.
-  - Pacification blocks harmful attacks specifically. It is a gameplay rule about intent, not
-    a loss of faculties.
+- **Buckle, pacification and the other "situational" gates.** An earlier version of this
+  design left these as attempt events. Replacing `ActionBlockerSystem` means every gate needs
+  a home. Spec §16 gives each one a bucket:
+  - **Buckle is a condition.** It pins posture in both directions, so it declares a new
+    `PostureLocked`, which blocks a new `Down` action as well as `Stand`. Cryo pods use the
+    same condition.
+  - **Pacification is a pair rule.** It is about intent against a particular target, not a
+    loss of faculties. The same goes for the AI whitelist and the guardian-host rule.
+  - **Target-side checks are target vetoes.** Examples are virtual items and things hidden
+    under the floor.
+
+  Pair rules and target vetoes each reduce to one event that the bookkeeper raises. They
+  replace the dozen typed attempt events.
 
 ## 9. Risks
 

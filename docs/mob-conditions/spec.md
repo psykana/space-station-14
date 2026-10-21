@@ -8,25 +8,32 @@ used in the RFC 2119 sense.
 
 ## 1. Scope
 
+**Goal.** One bookkeeper system answers "can this entity do X?". It replaces
+`ActionBlockerSystem` and the attempt events it raises:
+- **Producers** declare what is wrong with an entity.
+- **Consumers** ask the bookkeeper. No other system decides whether an action is blocked.
+
+§15 specifies that end state. §16 classifies every current attempt-event subscriber into the
+bucket it moves to. Sections 2–14 specify the first steps toward it.
+
 **Covered:**
 - One closed vocabulary of mob conditions and one of mob actions.
-- A cached per-mob component.
-- A single system that derives blocked actions from conditions and cancels the existing
-  attempt events.
+- A cached per-entity component.
+- The bookkeeper, which derives blocked actions from conditions and, during the migration,
+  still cancels the existing attempt events.
 - A consumer-side requirements struct with ignore masks, used by interactions, UIs and the
   action bar.
 - UI access tiers.
+- The end-state design (§15) and the attempt-event inventory (§16).
 
 **Not covered:**
-- Creature properties (`ComplexInteractionComponent`, `BlockWritingComponent`, literacy).
-  They stay components; this system consumes them.
-- Situational gates (§6.4).
 - Perception and chat filtering (design §8).
 
-**Compatibility rule:**
-- Every existing `ActionBlockerSystem.CanX()` keeps its signature and semantics.
-- Every existing attempt event keeps being raised. Unmigrated subscribers keep working
-  unchanged.
+**Migration rule (temporary):**
+- Until `ActionBlockerSystem` is deleted, each `ActionBlockerSystem.CanX()` keeps its signature
+  and semantics, and forwards to the bookkeeper (§15.5).
+- Each existing attempt event keeps being raised until the last subscriber in §16 has moved
+  out of it. Then it is deleted. Unmigrated subscribers keep working unchanged until then.
 
 ## 2. Types
 
@@ -54,7 +61,8 @@ public enum MobCondition : ushort
 
 **Rules:**
 - A member MUST NOT be added unless something sets it, either a producer declares it or the
-  cascade (§3.1) derives it.
+  cascade (§3.1) derives it. In the end state, the vocabulary is exactly the bookkeeper's API
+  plus what its producers declare (§15.6).
 - `UiBlocked` and `PullBlocked` are currently derived-only and change no behaviour on their own:
   - `UiAccess` already runs the full `CanInteract` (§5.2).
   - `PullingSystem.CanPull` (`Movement/Pulling/Systems/PullingSystem.cs:441–451`) already
@@ -185,6 +193,10 @@ called it `ActionRequirements`; that name MUST NOT be used.
   `GetUiStatus(actor, uiEntity, key) == Interactive`.
 
 ### 2.7 Change to an existing event
+
+> **Superseded by §15.5 step 1.** The bookkeeper checks conditions directly instead of through
+> `InteractionAttemptEvent`, so this field is removed again. It is kept here because the demo
+> implements it.
 
 `InteractionAttemptEvent` (`Content.Shared/Interaction/Events/InteractionAttemptEvent.cs`) gains
 an optional constructor parameter and a field:
@@ -375,6 +387,11 @@ blocked or unblocked. To catch this:
 
 ### 5.1 Central subscriptions
 
+> **Migration only.** These subscriptions exist while the typed attempt events do. §15.5 step 1
+> drops the `InteractionAttemptEvent` and `ConsciousAttemptEvent` ones, and each of the others
+> goes when its event is deleted. The cancel-only rule below carries over to the two
+> end-state events (§15.3).
+
 `MobConditionSystem` subscribes on `MobConditionsComponent` to every event in §2.2. Each
 handler cancels when `(comp.Blocked & action) != 0`.
 
@@ -396,6 +413,9 @@ One existing handler breaks the rule. `SharedStationAiSystem.OnHeldInteraction`
 - Test `StationAiDoesNotUncancel` (§13) covers it.
 
 ### 5.2 `ActionBlockerSystem` overload — `ActionBlockerSystem.Conditions.cs`
+
+> **Superseded by §15.2.** In the end state this overload is the bookkeeper's `CanPerform`, and
+> `ActionBlockerSystem` only forwards to it (§15.5).
 
 ```csharp
 public bool CanInteract(EntityUid user, EntityUid? target, in InteractionRequirements req)
@@ -431,6 +451,9 @@ migration: an unmigrated cause has not been classified yet.
   (see §11 Q2).
 
 ### 5.4 Speak, last words and ordering
+
+> **Migration only, for the ordering.** Once the muted status effect declares `Silenced`
+> (§16.1), the relay and its ordering go away. The last-words rule stays.
 
 `OnSpeakAttempt`:
 1. If `Speak` is not blocked, return.
@@ -503,6 +526,9 @@ Floored` from both paths. Both paths agree, which is fine.
 
 ### 6.3 Later slices: pure-cancel sources found since July
 
+> §16.1 lists these again, together with every other producer, using the end-state vocabulary.
+> The deltas below still apply.
+
 No closed condition maps exactly onto most of these sources. The "Delta" column lists what the
 proposed condition would block *in addition to* today's events. Each row MUST either ship the
 delta as a stated gameplay change, or keep a residual event and pick a narrower condition.
@@ -520,27 +546,10 @@ delta as a stated gameplay change, or keep a residual event and pick a narrower 
 Each row SHOULD be its own commit, with that system's existing tests. Rows with a delta go in
 the PR description as gameplay changes (§11 Q7).
 
-### 6.4 Out of scope: situational gates
+### 6.4 Everything else
 
-These depend on the target, the context or extra state rather than the mob's faculties, so
-they stay attempt-event subscribers:
-
-- Buckle (`Buckle/SharedBuckleSystem.Buckle.cs`). It pins posture both ways (design §8).
-- Pacification (`CombatMode/Pacification/PacificationSystem.cs`).
-- Climb.
-- Vehicle (`Vehicle/Systems/VehicleSystem.cs`).
-- ShuttleConsole.
-- StationAi whitelist. It still has to follow the cancel-only rule (§5.1).
-- `SharedInteractionSystem.Blocking.cs` (`BlockMovementComponent`, flag-driven).
-- `SharedMoverController`.
-- Guardian.
-- Cryo pod (`Medical/Cryogenics/SharedInsideCryoPodSystem.cs`, `DownAttemptEvent`). It pins
-  posture the way buckle does.
-- `MutedStatusEffectSystem` (the Speak relay; see the ordering in §5.4).
-- `DnaImprintEntityEffectSystem` (`Content.Server`, target-dependent Attack and Point; §6.1.6).
-- The Speech and Emote capability checks (`Speech/SpeechSystem.cs`, `Emoting/EmoteSystem.cs`).
-  These are creature properties.
-- The client `ReplaySpectatorSystem`.
+Nothing is permanently out of scope. Every remaining attempt-event subscriber is classified
+in §16, and each one leaves its event when its bucket's mechanism (§15.2–15.4) lands.
 
 ## 7. Action bar
 
@@ -894,7 +903,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | Should `RefreshMobConditionsEvent` be relayed through status effects, so a status effect entity can declare a condition directly? | **Yes**, in a later slice. The precedent is five existing `Refresh*Event` relays in `StatusEffectNew/StatusEffectSystem.Relay.cs:41–72` (`RefRelayStatusEffectEvent`). It needs refresh calls on status-effect apply and remove. |
-| Q2 | How does the `KnockdownStatusEffect` `StandUp` pin (`SharedStunSystem.cs:69/371`) map to conditions? | Keep it as a relay handler for now. `Floored` blocks `Stand`, not `StandUp`, and changing that breaks recovery (§5.3). Revisit together with collapsing the two standing events. |
+| Q2 | How does the `KnockdownStatusEffect` `StandUp` pin (`SharedStunSystem.cs:69/371`) map to conditions? | **A new declarable `Pinned`, which blocks `StandUp` (§15.6).** `Floored` must keep allowing `StandUp`, or recovery breaks (§5.3). The status effect declares `Pinned` through the Q1 relay, and Worm declares it too (§16.1). |
 | Q3 | Should `CheckIncapacitatedCuffEvent` (`SharedCuffableSystem.cs:525/902`) be replaced with `HasCondition(target, Unconscious)`? | The Sleeping and MobState answers map to `Unconscious`. The Stamina-crit answer (`SharedStaminaSystem.cs:147`) has no condition: stamcrit applies stun, but #45296 deliberately excluded plain stun. Either add stamcrit as an explicit source or leave the event. Ask maintainers. |
 | Q4 | Can cuffed mobs struggle out of containers (§9.3)? | Balance call. Raise it with maintainers. |
 | Q5 | Do the action precision tweaks (§7.4) ship with the parity PR? | No. Parity first, then a separate balance PR. |
@@ -902,6 +911,10 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 | Q7 | Are the §6.3 deltas acceptable? Frozen players can't drop, puppets can't attack or throw, spiked mobs can't interact, mobs in disposals can't use held items. | Each one is defensible, but each is a gameplay change. List it in that row's PR, or keep a residual event. |
 | Q8 | Should spectators be able to inspect `InHandsOnly` UIs, for example a PDA lying on the floor (§8.6)? | Ask maintainers. If no, step 1 of §8.1 returns `Close` for spectators when `comp.InHandsOnly`. |
 | Q9 | Should `BlockSpectators` stay entity-wide (today's `:159` behaviour) or become per-key like the rest of the policy (§8.1)? | Keep it entity-wide for slice 3 (parity), and revisit if a multi-key entity needs a mixed policy. |
+| Q10 | What is the bookkeeper called once it replaces `ActionBlockerSystem` (§15.1)? | Rename before the forwarding step (§15.5), while the API has one caller per method. `MobConditionSystem` undersells it: it answers for any entity, and it owns pair rules and target vetoes too. Ask maintainers. |
+| Q11 | `BlockMovementComponent` blocks `ChangeDirection` as well as `Move`, but `Immobilized` doesn't (§16.1). Should `Immobilized` block `ChangeDirection`? | No: paralysed legs, chasms and tethers let you turn today. Give `BlockMovement` its own declared pair, `Immobilized` plus a direction lock, or let it declare `Incapacitated` if its users never need hands. Check its prototype users (`pda.yml`, `silicon.yml`, `mothershipcore.yml` and others) first. |
+| Q12 | `PostureLocked` blocks both `Stand` and `Down`, but the cryo pod only cancels `Down` today (§16.1). | Accept it: an occupant of a pod is already upright and can't move, so blocking `Stand` changes nothing observable. |
+| Q13 | Pair rules (§15.3) and target vetoes (§15.4) are not cached. Is that a performance problem? | Not yet. Only a handful of subscribers handle each event, and the hot path (bucket 1) stays cached. Measure before optimizing. |
 
 ## 12. PR slicing for upstream
 
@@ -934,6 +947,14 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
    - §11 Q1 relay.
    - §7.4 and §9.3 balance changes.
    - Perception (design §8).
+
+6. **End state (§15.5).** Each step is its own PR:
+   - the forwarding step;
+   - the two end-state events;
+   - one PR per bucket area of §16;
+   - the movement cache;
+   - the call-site migration;
+   - deleting `ActionBlockerSystem`.
 
 Each PR's description links design.md.
 
@@ -1012,6 +1033,267 @@ buckle, pulling, hands, actions, changeling, vehicle, speech/muting.
 - XML doc `cref`s must use real namespaces. `StartPullAttemptEvent` is
   `Content.Shared.Pulling.Events`.
 
+## 15. End state: the bookkeeper
+
+### 15.1 Responsibilities
+
+One system, the *bookkeeper*, answers every "can this entity do X?" question. Its working name
+is `MobConditionSystem`; the final name is §11 Q10.
+
+It owns four mechanisms, one per bucket of §16:
+
+| Bucket | Question | Mechanism | Cached |
+|---|---|---|---|
+| 1. Conditions | What is wrong with the entity? | producers declare `MobCondition`s (§2–4) | yes |
+| 2. Target vetoes | Can this target be acted on at all? | one event raised on the target (§15.3) | no |
+| 3. Pair rules | Is this action allowed for this user against this target? | one event raised on the user (§15.3) | no |
+| 4. Creature properties | Does the entity have the faculty at all? | components the bookkeeper reads (§15.4) | no |
+
+**Rules:**
+- **The bookkeeper answers for any entity**, mob or not: borgs, AI eyes and vehicles too. An
+  entity without `MobConditionsComponent` has no conditions, but buckets 2–4 still apply to it.
+- **No other system raises an event to decide whether an action is blocked.** In the end state,
+  the typed attempt events (`InteractionAttemptEvent`, `UseAttemptEvent`, `UpdateCanMoveEvent`,
+  `StandAttemptEvent`, `GettingPickedUpAttemptEvent` and the rest) no longer exist.
+- **Domain rules stay in their domain.** Buckling, slipping, seeing and climbing onto things have
+  their own attempt events. They are not blockers and are outside §16. Their handlers become
+  *consumers*: a buckle rule that needs "can the user act" asks the bookkeeper.
+- **Consumers never re-implement blocking.** Code that today checks `HasComp<StunnedComponent>`,
+  `CanStillInteract` or `MobState` to decide whether someone can act asks the bookkeeper instead.
+
+### 15.2 Consumer API
+
+```csharp
+public bool CanPerform(EntityUid user, in InteractionRequirements req,
+    EntityUid? target = null, EntityUid? used = null);
+
+public bool CanPerform(EntityUid user, in InteractionRequirements req,
+    EntityUid? target, EntityUid? used, out string? reason);
+```
+
+**Evaluation order** (cheapest first; the first failure wins, and supplies `reason`):
+
+1. **Conditions.** `IsBlocked(user, req.Action, req.Ignoring)`, from the cache (§4.3). The reason
+   comes from the condition (§10.2).
+2. **Creature properties** for `req.Action` (§15.4), plus `req.NeedComplex`.
+3. **Pair rule.** Raise `MobActionAttemptEvent` on the user (§15.3).
+4. **Target veto.** If `target` is set and isn't the user, raise `MobActionTargetAttemptEvent` on
+   the target. For `UseHeld` and `Throw`, raise it on `used` as well.
+
+**Mapping from today's API:**
+
+| `ActionBlockerSystem` | Bookkeeper |
+|---|---|
+| `CanInteract(user, target)` | `CanPerform(user, {Interact}, target)` |
+| `CanConsciouslyPerformAction(user)` | `CanPerform(user, {Conscious})` |
+| `CanUseHeldEntity(user, used)` | `CanPerform(user, {UseHeld}, used: used)` |
+| `CanPickup(user, item)` | `CanPerform(user, {Pickup}, item)` |
+| `CanDrop(user)` | `CanPerform(user, {Drop})` |
+| `CanThrow(user, item)` | `CanPerform(user, {Throw}, used: item)` |
+| `CanAttack(user, target, weapon, disarm)` | `CanPerform(user, {Attack}, target, weapon)`. The container rule in `CanAttack` (`ActionBlockerSystem.cs:180–197`) becomes a built-in step 3 rule, and the vehicle's container override becomes a pair rule (§16.3). `disarm` and the weapon go in the event. |
+| `CanSpeak(user)`, `CanEmote(user)`, `CanChangeDirection(user)` | `CanPerform(user, {Speak / Emote / ChangeDirection})` |
+| `CanMove(user)` | `CanMove(user)`, the movement cache (§15.3) |
+| `UpdateCanMove(user)` | `Refresh(user)`: the caller is a producer whose state changed |
+| `CanComplexInteract(user)` | creature property (§15.4), still exposed as a helper |
+| `CanShiver`, `CanSweat` | deleted. They have callers (`ThermalRegulatorSystem.cs:90/97`) but no subscribers, so they always return true. |
+
+### 15.3 The two events, and movement
+
+```csharp
+[ByRefEvent]
+public record struct MobActionAttemptEvent(EntityUid User, MobAction Action, EntityUid? Target, EntityUid? Used)
+{
+    public bool Cancelled;
+    public string? Reason;   // optional, localized; shown by consumers that report failures
+}
+
+[ByRefEvent]
+public record struct MobActionTargetAttemptEvent(EntityUid User, MobAction Action, EntityUid? Used)
+{
+    public bool Cancelled;
+    public string? Reason;
+}
+```
+
+- Both events are **cancel-only** (§5.1). A handler sets `Cancelled = true` or does nothing.
+- Each replaces several typed events:
+  - `MobActionAttemptEvent` takes over the pair-rule subscribers of today's typed user events.
+  - `MobActionTargetAttemptEvent` takes over `GettingInteractedWithAttemptEvent`,
+    `GettingPickedUpAttemptEvent`, `GettingUsedAttemptEvent`, `ThrowItemAttemptEvent` and
+    `GettingAttackedAttemptEvent`.
+- A handler switches on `Action`. One subscription per system covers every action it cares
+  about, which also avoids the engine's one-subscription-per-component-and-event limit.
+- **`Reason` replaces ad-hoc popups** inside attempt handlers. Examples are the multi-handed
+  item popup and the worm's stand-up message. The consumer decides whether to show it.
+
+**Movement.** The bookkeeper owns the movement cache:
+- `InputMoverComponent.CanMove` is written only by `Refresh`. Its value is
+  `(Blocked & Move) == 0`, together with the movement creature property (§15.4).
+- `Refresh` raises `CanMoveUpdatedEvent` when the value changes, and so does the client-side
+  derivation in `AfterAutoHandleStateEvent`.
+- `UpdateCanMoveEvent` is deleted. Each of its subscribers becomes a producer (§16.1), and each
+  of the 26 `UpdateCanMove` callers becomes a `Refresh`.
+- This removes today's two-cache synchronization. That includes the extra `UpdateCanMove` calls
+  in the demo's stun producer and in `OnHandleState`.
+
+### 15.4 Creature properties
+
+The bookkeeper reads these components at query time. They change rarely, so they aren't cached.
+
+| Action | Requires | Today |
+|---|---|---|
+| any, when `NeedComplex` | `ComplexInteractionComponent` | `ActionBlockerSystem.CanComplexInteract` |
+| `Speak` | an enabled `SpeechComponent` | `SpeechSystem` broadcast cancel |
+| `Emote` | an enabled `EmotingComponent` | `EmoteSystem` broadcast cancel |
+| `Point` | not `BrainComponent` or `BorgBrainComponent` (no body to point with) | `BrainSystem`, `SharedBorgSystem` cancels |
+| `Move` | `InputMoverComponent` and a non-static physics body | `SharedMoverController.OnCanMove` |
+
+`Move` is the exception to "not cached": it feeds the movement cache. A change of body type
+must therefore call `Refresh`, the same way it calls `UpdateCanMove` today.
+
+### 15.5 Migration
+
+1. **Forward.**
+   - Move every `CanX` body into the bookkeeper. Each `ActionBlockerSystem` method becomes a
+     one-line forward.
+   - The bookkeeper checks conditions directly. It no longer subscribes to
+     `InteractionAttemptEvent` or `ConsciousAttemptEvent`, which removes the
+     `InteractionAttemptEvent.Ignoring` field (§2.7) and the §5.1 exceptions.
+   - During the migration the bookkeeper raises the legacy typed events after its own checks.
+     It is the only place that still raises them.
+   - Add `MobActionAttemptEvent` and `MobActionTargetAttemptEvent`.
+   - Delete `CanShiver` and `CanSweat`.
+2. **Move subscribers out, one §16 row per commit.** When an event has no subscribers left,
+   delete its raise and its type.
+3. **Move the movement cache** (§15.3) once every `UpdateCanMoveEvent` row has moved.
+4. **Move the ~140 call sites** to the bookkeeper, one PR per area. This is mechanical.
+5. **Delete `ActionBlockerSystem`.**
+
+Steps 2–4 can interleave. Step 1 has to come first, because it fixes the direction of the
+dependency: `ActionBlockerSystem` depends on the bookkeeper, never the other way round.
+
+### 15.6 Vocabulary changes
+
+The vocabulary is closed. It is exactly the bookkeeper's API plus what its producers declare. A
+member is added together with the producer or consumer that needs it.
+
+**New conditions:**
+
+| Condition | Blocks | Declared by (§16) |
+|---|---|---|
+| `Pinned` | `StandUp` | the `KnockdownStatusEffect` (through the Q1 relay), Worm |
+| `PostureLocked` | `Stand`, `Down` | buckle (while buckled), cryo pod occupant |
+| `Silenced` | `Speak`, `Emote` | admin freeze with `Muted`, the muted status effect (through the Q1 relay) |
+
+**New actions:**
+
+| Action | Consumer |
+|---|---|
+| `Down` | `StandingStateSystem.Down`, replacing `DownAttemptEvent` |
+| `Equip` | the inventory's self-equip and self-unequip path (user == target), replacing the self-only `IsEquippingAttemptEvent` / `IsUnequippingAttemptEvent` handlers in MobState, Stun and Cuffs |
+
+**Policy additions** (to §3.2): `Incapacitated` and `HandsBlocked` block `Equip`.
+
+`Down` is blocked only by `PostureLocked`. In particular, `Unconscious` must **not** block
+`Down`: crit and death lie the mob down through `StandingStateSystem.Down`
+(`MobStateSystem.Subscribers.cs:49`).
+
+### 15.7 Not gates
+
+One attempt-event subscriber blocks nothing: `DnaImprintEntityEffectSystem.OnPointAttempt`
+clears follower targets as a side effect. It moves into its existing `AfterPointedAtEvent`
+handler, which clears the targets first and then sets the new ones. Attempt events are for
+asking, not for reacting.
+
+## 16. Attempt-event inventory
+
+Every subscriber, at the demo head of `mob-conditions` (`ed4bc915c5`; line numbers in §15–16 are
+against it), of:
+- the events `ActionBlockerSystem` raises;
+- the standing, stand-up, down, pull and point attempt events;
+- their target-side counterparts.
+
+Self-only equip and unbuckle checks that duplicate them are included too.
+
+Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migrated in the demo.
+
+### 16.1 Bucket 1: conditions
+
+| System (file) | Events cancelled today | Declares | Notes |
+|---|---|---|---|
+| `MobStateSystem` (`Mobs/Systems/MobStateSystem.Subscribers.cs`) | 11 via `CheckAct`, Conscious, Speak | `Unconscious` | **Done.** The self equip/unequip checks move to `Equip`. The self-unbuckle check becomes a buckle consumer asking `Interact`. |
+| `SharedStunSystem`, `StunnedComponent` (`Stunnable/SharedStunSystem.cs`) | ChangeDirection, Move, Interaction, Use, Throw, Drop, Attack, Pickup | `Incapacitated \| Immobilized` | **Done.** The self equip/unequip checks move to `Equip`. |
+| `SharedStunSystem.Knockdown`, `KnockedDownComponent` | Stand | `Floored` | |
+| `SharedStunSystem`, `KnockdownStatusEffectComponent` relay (`:69/371`) | StandUp | `Pinned` | Needs the Q1 status-effect relay of `RefreshMobConditionsEvent`. |
+| `SleepingSystem` (`Bed/Sleep/SleepingSystem.cs`) | Speak, Point, Conscious, StandUp, Emote | `Unconscious` | Refresh before `SleepStateChangedEvent` (§6.2). The self-unbuckle check becomes a buckle consumer. |
+| `SharedCuffableSystem` (`Cuffs/SharedCuffableSystem.cs`) | Drop, Pickup, Attack, Use, Interaction | `Restrained` | **Done.** |
+| `SharedCuffableSystem.HandleMoveAttempt` (`:259`) | Move, while restrained *and* pulled | `Immobilized`, while restrained and pulled | `OnPull` already fires on pull start and stop; it becomes `Refresh`. |
+| `SharedGhostSystem` (`Ghost/Systems/SharedGhostSystem.cs`) | Use, Emote, Drop, Pickup, Interaction | `Incorporeal` | |
+| `LegsParalyzedSystem` (`Traits/Assorted/LegsParalyzedSystem.cs`) | Move | `Immobilized` | |
+| `AdminFrozenSystem` (`Administration/AdminFrozenSystem.cs`) | Use, Pickup, Throw, Interaction, Attack, ChangeDirection, Move; Speak and Emote if `Muted` | `Incapacitated \| Immobilized`, plus `Silenced` if `Muted` | Delta: +`Drop` (Q7). |
+| `SharedVentriloquistPuppetSystem` (`Puppet/SharedVentriloquistPuppetSystem.cs`) | Use, Interaction, Drop, Pickup, Move, ChangeDirection, Emote | `Incapacitated \| Immobilized` | Delta: +`Attack`, +`Throw` (Q7). The Emote block moves to bucket 4: check that the puppet prototype (`Objects/Fun/toys.yml:167`) has no enabled emoting. |
+| `SharedKitchenSpikeSystem`, `KitchenSpikeHookedComponent` | ChangeDirection, Use, Throw, Drop, Attack, Pickup | `Incapacitated` | Delta: +`Interact` (Q7). |
+| `SharedBeingDisposedSystem` | Interaction, Attack | `HandsBlocked` | Delta: +`UseHeld`, `Pickup`, `Drop` (Q7). |
+| `WormSystem` (`Movement/Systems/WormSystem.cs`) | StandUp (also sets a message and turns autostand off) | `Pinned` | The message becomes the `Pinned` failure reason. The worm sets autostand on its own knockdown state instead of through the event. |
+| `ChasmSystem`, `ChasmFallingComponent` | Move | `Immobilized` | |
+| `SharedTetherGunSystem`, `TetheredComponent` | Move | `Immobilized` | |
+| `SharedBuckleSystem` (`Buckle/SharedBuckleSystem.Buckle.cs`) | Down, Stand, Move while buckled | `PostureLocked`, plus `Immobilized` unless the entity has `RelayInputMoverComponent` | Refresh on buckle and unbuckle. |
+| `SharedInsideCryoPodSystem` | Down | `PostureLocked` | Delta: +`Stand` (Q12). |
+| `ClimbSystem`, `ClimbingComponent` | Move while `NextTransition != null` | `Immobilized` while mid-climb | Refresh when a climb starts and ends. |
+| `VehicleSystem`, `VehicleComponent` | Move when `VehicleCanRunEvent` says it can't run | `Immobilized`, **on the vehicle** | The vehicle gets `MobConditionsComponent`. It refreshes when the inputs to `VehicleCanRunEvent` change. |
+| `VehicleSystem`, `VehicleOperatorComponent` (`:82`) | Move when the operator can't operate | `Immobilized`, **on the vehicle**, when its operator can't operate | **Cross-entity.** The vehicle refreshes on its operator's `MobConditionsChangedEvent` (broadcast). This removes the R1 re-entrancy case: no handler calls `CanX` on its own entity any more. |
+| `SharedShuttleConsoleSystem`, `PilotComponent` | Move while piloting | `Immobilized` | |
+| `SharedInteractionSystem.Blocking`, `BlockMovementComponent` | Interaction, Drop, Pickup if `BlockInteraction`; Use if `BlockUse`; Move and ChangeDirection always | `HandsBlocked` for the interaction flags; `Immobilized` for movement | `ChangeDirection` has no matching condition (Q11). |
+| `MutedStatusEffectSystem` (`Speech/Muting/MutedStatusEffectSystem.cs`) | Speak, through the status-effect relay, with a popup | `Silenced`, through the Q1 relay | The popup becomes the `Silenced` failure reason. The relay ordering in §5.4 disappears: the reason priority (Unconscious first) already keeps a dead mime quiet. |
+| `ReplaySpectatorSystem` (`Content.Client/Replay/Spectator/ReplaySpectatorSystem.Blockers.cs`) | Use, Pickup, Throw, Interaction, Attack, Drop, Move, ChangeDirection | `Incorporeal \| Immobilized` | Client-only, so it is the one exception to §6.1.6: a replay has no server to disagree with. |
+
+### 16.2 Bucket 2: target vetoes (`MobActionTargetAttemptEvent`)
+
+| System | Event today | Rule |
+|---|---|---|
+| `SharedVirtualItemSystem` (`Inventory/VirtualItem/SharedVirtualItemSystem.cs:44`) | GettingInteractedWith | A virtual item can't be interacted with. |
+| `SharedSubFloorHideSystem` (`SubFloor/SharedSubFloorHideSystem.cs:40–41`) | GettingInteractedWith, GettingAttacked | Can't touch or attack things hidden under the floor. Users with `BypassInteractionChecksComponent` are exempt. |
+| `MultiHandedItemSystem` (`Item/MultiHandedItemSystem.cs:19`) | GettingPickedUp | Needs enough free hands. Its popup becomes `Reason`. |
+| `SharedMechSystem.Relay` (`Mech/EntitySystems/SharedMechSystem.Relay.cs:9`) | GettingAttacked | Relays the veto to the pilot. The relay stays inside the handler. |
+| none | `GettingUsedAttemptEvent`, `ThrowItemAttemptEvent` | No subscribers. Deleted in §15.5 step 1. |
+
+### 16.3 Bucket 3: pair rules (`MobActionAttemptEvent`)
+
+| System | Event today | Rule |
+|---|---|---|
+| `PacificationSystem` (`CombatMode/Pacification/PacificationSystem.cs:29`) | Attack | A pacified user can't make harmful attacks. It asks the target through its own `AttemptPacifiedAttackEvent`; the subscribers of that event (`PacificationSystem:31`, `MobStateSystem.Subscribers.cs:186`) are internal to this rule and stay. |
+| `SharedStationAiSystem.Held` (`Silicons/StationAi/SharedStationAiSystem.Held.cs:148`) | Interaction | The AI can only interact with whitelisted targets. |
+| `GuardianSystem` (`Guardian/GuardianSystem.cs:130, 147`) | Attack; the relayed mech-pilot GettingAttacked | A guardian can't attack its host, including when the host pilots a mech. |
+| `SharedBuckleSystem` (`Buckle/SharedBuckleSystem.Buckle.cs:42`) | StartPull | Can't pull the thing you're buckled to, unless `PullStrap`. |
+| `VehicleSystem` (`Vehicle/Systems/VehicleSystem.cs:103`) | Attack | An operator can't attack their own vehicle when the vehicle `CanAttack`. |
+| `VehicleSystem` (`:93`) | `CanAttackFromContainerEvent` | Lets an operator attack out of their vehicle. It becomes an exception to the built-in container rule (§15.2). |
+| `DnaImprintEntityEffectSystem`, `NPCImprintedComponent` (`Content.Server/EntityEffects/Effects/DnaImprintEntityEffectSystem.cs:130`) | Attack | An imprinted NPC won't attack friends. Server-only: unlike conditions, a pair rule is evaluated at query time, so a server-only rule only mispredicts for NPCs, which aren't predicted anyway. |
+
+### 16.4 Bucket 4: creature properties
+
+| System | Event today | Property (§15.4) |
+|---|---|---|
+| `SpeechSystem` (`Speech/SpeechSystem.cs:9`) | Speak (broadcast) | `SpeechComponent` |
+| `EmoteSystem` (`Emoting/EmoteSystem.cs:9`) | Emote (broadcast) | `EmotingComponent` |
+| `BrainSystem` (`Body/Systems/BrainSystem.cs:20`) | Point | `BrainComponent` denies `Point` |
+| `SharedBorgSystem` (`Silicons/Borgs/SharedBorgSystem.cs:101`) | Point | `BorgBrainComponent` denies `Point` |
+| `SharedMoverController` (`Movement/Systems/SharedMoverController.cs:93`) | Move | `InputMoverComponent` with a non-static body |
+| `ActionBlockerSystem.CanComplexInteract` | (a method, not an event) | `ComplexInteractionComponent` |
+
+### 16.5 N: not gates
+
+| System | Event today | Destination |
+|---|---|---|
+| `DnaImprintEntityEffectSystem`, `DNALeaderComponent` (`:115`) | Point (never cancels) | `AfterPointedAtEvent` (§15.7) |
+
+### 16.6 Status-effect relays
+
+The relays in `StatusEffectNew/StatusEffectSystem.Relay.cs` are plumbing, not rules:
+- **`UpdateCanMoveEvent` (`:43`):** no subscribers. Delete it.
+- **`StandUpAttemptEvent` (`:51`) and `SpeakAttemptEvent` (`:60`):** replaced by one relay of
+  `RefreshMobConditionsEvent` (Q1). Through it, the knockdown and muted status effects declare
+  `Pinned` and `Silenced`.
+
 ## Appendix A: the July prototype
 
 A working implementation of slices 1 and 3 exists as a local stash against upstream
@@ -1043,6 +1325,30 @@ code needs these changes:
   - The EntityCondition bridge (§10).
   - The #46045 range cancel and open veto, which must be kept (§8.2).
   - The open side-effect audit (§8.5) and the cache consistency check (§4.5).
+
+## Appendix C: end-state revision (2026-10-21)
+
+The goal changed from "centralise the attempt events" to "replace `ActionBlockerSystem` with one
+bookkeeper".
+
+**New sections:**
+- **§15:** the end state, the consumer API, the two remaining events, movement ownership,
+  creature properties, the migration steps and the vocabulary changes.
+- **§16:** every current attempt-event subscriber classified into four buckets, plus one
+  non-gate.
+
+**Changes to existing sections:**
+- **§1:** the compatibility rule became a temporary migration rule.
+- **§2.7, §5.1, §5.2 and §5.4:** marked as superseded or migration-only.
+- **§6.4:** "out of scope" became "classified in §16".
+- **Q2:** answered with `Pinned`.
+- **Q10–Q13:** added.
+
+**Findings from the second review that this resolves in the design:**
+- the routing of conditions through the legacy events, and the `Ignoring` field;
+- the two movement caches;
+- the circular dependency between `ActionBlockerSystem` and `MobConditionSystem`;
+- the vehicle re-entrancy, which becomes a cross-entity producer.
 
 ## Appendix B: review changelog (2026-10-20)
 
