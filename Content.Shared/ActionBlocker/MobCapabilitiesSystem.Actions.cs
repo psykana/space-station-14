@@ -6,7 +6,11 @@ using Content.Shared.Interaction.Events;
 using Content.Shared.Item;
 using Content.Shared.Movement.Components;
 using Content.Shared.Movement.Events;
+using Content.Shared.Pointing;
+using Content.Shared.Pulling.Events;
 using Content.Shared.Speech;
+using Content.Shared.Standing;
+using Content.Shared.Stunnable;
 using Content.Shared.Throwing;
 using Content.Shared.Weapons.Melee;
 using Robust.Shared.Containers;
@@ -118,6 +122,34 @@ public sealed partial class MobCapabilitiesSystem
         return canMove;
     }
 
+    /// <summary>
+    /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/> for
+    /// <see cref="MobAction.StandUp"/>. The legacy event carries data back out (autostand, a message), so the caller
+    /// supplies it.
+    /// </summary>
+    public bool CanStandUp(EntityUid uid, ref StandUpAttemptEvent ev)
+    {
+        var req = new InteractionRequirements { Action = MobAction.StandUp };
+
+        if (!CheckSelf(uid, req, out _))
+        {
+            ev.Cancelled = true;
+            return false;
+        }
+
+        RaiseLocalEvent(uid, ref ev);
+        if (ev.Cancelled)
+            return false;
+
+        if (!CheckRules(uid, req.Action, null, null, out _))
+        {
+            ev.Cancelled = true;
+            return false;
+        }
+
+        return true;
+    }
+
     private bool Perform(EntityUid user,
         in InteractionRequirements req,
         EntityUid? target,
@@ -125,9 +157,23 @@ public sealed partial class MobCapabilitiesSystem
         LegacyArgs legacy,
         out string? reason)
     {
+        if (!CheckSelf(user, req, out reason))
+            return false;
+
+        // Sources that haven't migrated yet still cancel their attempt events.
+        if (!RaiseLegacyAttempts(user, req.Action, target, used, legacy))
+            return false;
+
+        return CheckRules(user, req.Action, target, used, out reason);
+    }
+
+    /// <summary>
+    /// What the entity itself can do: its conditions, from the cache, then its creature properties.
+    /// </summary>
+    private bool CheckSelf(EntityUid user, in InteractionRequirements req, out string? reason)
+    {
         reason = null;
 
-        // 1. Conditions, from the cache.
         if (IsBlocked(user, req.Action, req.Ignoring) && !TryUseLastWords(user, req.Action))
         {
             if (TryGetBlockedReason(user, req.Action, out var conditionReason, req.Ignoring))
@@ -136,16 +182,17 @@ public sealed partial class MobCapabilitiesSystem
             return false;
         }
 
-        // 2. Creature properties.
-        if (req.NeedComplex && !CanComplexInteract(user))
-            return false;
+        return !req.NeedComplex || CanComplexInteract(user);
+    }
 
-        // 3. Sources that haven't migrated yet still cancel their attempt events.
-        if (!RaiseLegacyAttempts(user, req.Action, target, used, legacy))
-            return false;
+    /// <summary>
+    /// Rules about this user and target, then things that can't be acted on at all.
+    /// </summary>
+    private bool CheckRules(EntityUid user, MobAction action, EntityUid? target, EntityUid? used, out string? reason)
+    {
+        reason = null;
 
-        // 4. Rules about this user and target.
-        var ev = new MobActionAttemptEvent(user, req.Action, target, used);
+        var ev = new MobActionAttemptEvent(user, action, target, used);
         RaiseLocalEvent(user, ref ev);
         if (ev.Cancelled)
         {
@@ -153,12 +200,11 @@ public sealed partial class MobCapabilitiesSystem
             return false;
         }
 
-        // 5. Things that can't be acted on at all.
-        if (target != null && target != user && !TargetAllows(user, req.Action, target.Value, used, out reason))
+        if (target != null && target != user && !TargetAllows(user, action, target.Value, used, out reason))
             return false;
 
-        if (used != null && req.Action is MobAction.UseHeld or MobAction.Throw &&
-            !TargetAllows(user, req.Action, used.Value, used, out reason))
+        if (used != null && action is MobAction.UseHeld or MobAction.Throw &&
+            !TargetAllows(user, action, used.Value, used, out reason))
         {
             return false;
         }
@@ -297,9 +343,50 @@ public sealed partial class MobCapabilitiesSystem
                 return !ev.Cancelled;
             }
 
+            case MobAction.Stand:
+            {
+                var ev = new StandAttemptEvent();
+                RaiseLocalEvent(user, ev);
+                return !ev.Cancelled;
+            }
+
+            case MobAction.Down:
+            {
+                var ev = new DownAttemptEvent();
+                RaiseLocalEvent(user, ev);
+                return !ev.Cancelled;
+            }
+
+            case MobAction.StandUp:
+            {
+                // Callers that need the event's data use CanStandUp.
+                var ev = new StandUpAttemptEvent();
+                RaiseLocalEvent(user, ref ev);
+                return !ev.Cancelled;
+            }
+
+            case MobAction.Pull:
+            {
+                if (target == null)
+                    return true;
+
+                // Raised broadcast too.
+                var ev = new StartPullAttemptEvent(user, target.Value);
+                RaiseLocalEvent(user, ev, true);
+                return !ev.Cancelled;
+            }
+
+            case MobAction.Point:
+            {
+                // Raised broadcast too.
+                var ev = new PointAttemptEvent(user);
+                RaiseLocalEvent(user, ev, true);
+                return !ev.Cancelled;
+            }
+
             default:
-                // Move, Stand, StandUp, Pull and Point are still asked through their own events or caches.
-                Log.Error($"{nameof(CanPerform)} does not support {action} yet.");
+                // Move is a cache: use CanMove.
+                Log.Error($"{nameof(CanPerform)} does not support {action}.");
                 return false;
         }
     }

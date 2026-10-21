@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Climbing.Events;
 using Content.Shared.Hands.Components;
 using Content.Shared.Inventory;
@@ -13,6 +14,7 @@ namespace Content.Shared.Standing;
 
 public sealed partial class StandingStateSystem : EntitySystem
 {
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private SharedAppearanceSystem _appearance = default!;
     [Dependency] private SharedAudioSystem _audio = default!;
     [Dependency] private SharedPhysicsSystem _physics = default!;
@@ -101,14 +103,8 @@ public sealed partial class StandingStateSystem : EntitySystem
         if (!standingState.Standing)
             return true;
 
-        if (!force)
-        {
-            var msg = new DownAttemptEvent();
-            RaiseLocalEvent(uid, msg, false);
-
-            if (msg.Cancelled)
-                return false;
-        }
+        if (!force && !_capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Down }))
+            return false;
 
         standingState.Standing = false;
         Dirty(uid, standingState);
@@ -148,14 +144,8 @@ public sealed partial class StandingStateSystem : EntitySystem
         if (standingState.Standing)
             return true;
 
-        if (!force)
-        {
-            var msg = new StandAttemptEvent();
-            RaiseLocalEvent(uid, msg, false);
-
-            if (msg.Cancelled)
-                return false;
-        }
+        if (!force && !_capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Stand }))
+            return false;
 
         standingState.Standing = true;
         Dirty(uid, standingState);

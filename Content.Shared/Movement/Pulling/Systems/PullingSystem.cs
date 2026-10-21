@@ -43,6 +43,7 @@ public sealed partial class PullingSystem : EntitySystem
     [Dependency] private IGameTiming _timing = default!;
     [Dependency] private ISharedAdminLogManager _adminLogger = default!;
     [Dependency] private ActionBlockerSystem _blocker = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private AlertsSystem _alertsSystem = default!;
     [Dependency] private MovementSpeedModifierSystem _modifierSystem = default!;
     [Dependency] private SharedJointSystem _joints = default!;
@@ -472,9 +473,10 @@ public sealed partial class PullingSystem : EntitySystem
 
         var getPulled = new BeingPulledAttemptEvent(puller, pullableUid);
         RaiseLocalEvent(pullableUid, getPulled, true);
-        var startPull = new StartPullAttemptEvent(puller, pullableUid);
-        RaiseLocalEvent(puller, startPull, true);
-        return !startPull.Cancelled && !getPulled.Cancelled;
+        var canPull = _capabilities.CanPerform(puller,
+            new InteractionRequirements { Action = MobAction.Pull },
+            pullableUid);
+        return canPull && !getPulled.Cancelled;
     }
 
     public bool TogglePull(Entity<PullableComponent?> pullable, EntityUid pullerUid)

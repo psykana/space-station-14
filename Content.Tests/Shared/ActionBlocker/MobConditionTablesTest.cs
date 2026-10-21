@@ -8,7 +8,7 @@ namespace Content.Tests.Shared.ActionBlocker;
 [TestOf(typeof(MobCapabilitiesSystem))]
 public sealed class MobConditionTablesTest
 {
-    private const MobAction AllActions = (MobAction) ((1u << 16) - 1);
+    private const MobAction AllActions = (MobAction) ((1u << 17) - 1);
 
     [Test]
     public void CascadeFixedPoint()
@@ -26,7 +26,9 @@ public sealed class MobConditionTablesTest
     public void UnconsciousBlocksEverything()
     {
         var blocked = MobCapabilitiesSystem.GetBlocked(MobCapabilitiesSystem.Expand(MobCondition.Unconscious));
-        Assert.That(blocked, Is.EqualTo(AllActions));
+
+        // Everything but lying down: crit and death lie the mob down.
+        Assert.That(blocked, Is.EqualTo(AllActions & ~MobAction.Down));
     }
 
     [Test]

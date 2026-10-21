@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Alert;
 using Content.Shared.Buckle.Components;
 using Content.Shared.CCVar;
@@ -344,7 +345,7 @@ public abstract partial class SharedStunSystem
             return false;
 
         var ev = new StandUpAttemptEvent(entity.Comp.AutoStand);
-        RaiseLocalEvent(entity, ref ev);
+        Capabilities.CanStandUp(entity, ref ev);
 
         if (ev.Autostand != entity.Comp.AutoStand)
             SetAutoStand((entity.Owner, entity.Comp), ev.Autostand);
@@ -367,10 +368,7 @@ public abstract partial class SharedStunSystem
         if (!KnockdownOver(entity))
             return false;
 
-        var ev = new StandUpAttemptEvent();
-        RaiseLocalEvent(entity, ref ev);
-
-        return !ev.Cancelled;
+        return Capabilities.CanPerform(entity, new InteractionRequirements { Action = MobAction.StandUp });
     }
 
     private bool StandingBlocked(Entity<KnockedDownComponent> entity)

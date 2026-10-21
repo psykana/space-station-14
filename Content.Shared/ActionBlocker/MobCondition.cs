@@ -115,4 +115,10 @@ public enum MobAction : uint
 
     /// <summary><see cref="Content.Shared.Stunnable.StandUpAttemptEvent"/>: may it try to rise.</summary>
     StandUp = 1 << 15,
+
+    /// <summary>
+    /// <see cref="Content.Shared.Standing.DownAttemptEvent"/>: may it lie down. Nothing unconscious blocks this;
+    /// crit and death lie the mob down.
+    /// </summary>
+    Down = 1 << 16,
 }

@@ -1,9 +1,5 @@
 using Content.Shared.CCVar;
 using Content.Shared.Damage.ForceSay;
-using Content.Shared.Pointing;
-using Content.Shared.Pulling.Events;
-using Content.Shared.Standing;
-using Content.Shared.Stunnable;
 using Robust.Shared.Configuration;
 using Robust.Shared.Network;
 using Robust.Shared.Timing;
@@ -325,43 +321,6 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
 
     #endregion
 
-    #region Attempt events
-
-    // Events raised outside the bookkeeper still need cancelling. Everything ActionBlockerSystem used to raise is
-    // checked directly in CanPerform instead.
-
-    [SubscribeLocalEvent]
-    private void OnStandUpAttempt(Entity<MobConditionsComponent> ent, ref StandUpAttemptEvent args)
-    {
-        if (IsBlocked((ent, ent.Comp), MobAction.StandUp))
-            args.Cancelled = true;
-    }
-
-    [SubscribeLocalEvent]
-    private void OnPointAttempt(EntityUid uid, MobConditionsComponent comp, PointAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Point, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnStandAttempt(EntityUid uid, MobConditionsComponent comp, StandAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Stand, args);
-    }
-
-    [SubscribeLocalEvent]
-    private void OnStartPullAttempt(EntityUid uid, MobConditionsComponent comp, StartPullAttemptEvent args)
-    {
-        CancelIfBlocked((uid, comp), MobAction.Pull, args);
-    }
-
-    private void CancelIfBlocked(Entity<MobConditionsComponent> ent, MobAction action, CancellableEntityEventArgs args)
-    {
-        if (IsBlocked((ent, ent.Comp), action))
-            args.Cancel();
-    }
-
-    #endregion
 
     #region Implementation
 
