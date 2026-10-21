@@ -45,6 +45,7 @@ namespace Content.Shared.Cuffs
         [Dependency] private INetManager _net = default!;
         [Dependency] private ISharedAdminLogManager _adminLog = default!;
         [Dependency] private ActionBlockerSystem _actionBlocker = default!;
+        [Dependency] private MobConditionSystem _conditions = default!;
         [Dependency] private AlertsSystem _alerts = default!;
         [Dependency] private SharedAudioSystem _audio = default!;
         [Dependency] private SharedContainerSystem _container = default!;
@@ -68,6 +69,7 @@ namespace Content.Shared.Cuffs
             SubscribeLocalEvent<CuffableComponent, EntInsertedIntoContainerMessage>(OnCuffsInsertedIntoContainer);
             SubscribeLocalEvent<CuffableComponent, RejuvenateEvent>(OnRejuvenate);
             SubscribeLocalEvent<CuffableComponent, ComponentInit>(OnStartup);
+            SubscribeLocalEvent<CuffableComponent, MapInitEvent>(OnMapInit);
             SubscribeLocalEvent<CuffableComponent, AttemptStopPullingEvent>(HandleStopPull);
             SubscribeLocalEvent<CuffableComponent, RemoveCuffsAlertEvent>(OnRemoveCuffsAlert);
             SubscribeLocalEvent<CuffableComponent, UpdateCanMoveEvent>(HandleMoveAttempt);
@@ -80,11 +82,7 @@ namespace Content.Shared.Cuffs
             SubscribeLocalEvent<CuffableComponent, UnCuffDoAfterEvent>(OnCuffableDoAfter);
             SubscribeLocalEvent<CuffableComponent, PullStartedMessage>(OnPull);
             SubscribeLocalEvent<CuffableComponent, PullStoppedMessage>(OnPull);
-            SubscribeLocalEvent<CuffableComponent, DropAttemptEvent>(CheckAct);
-            SubscribeLocalEvent<CuffableComponent, PickupAttemptEvent>(CheckAct);
-            SubscribeLocalEvent<CuffableComponent, AttackAttemptEvent>(CheckAct);
-            SubscribeLocalEvent<CuffableComponent, UseAttemptEvent>(CheckAct);
-            SubscribeLocalEvent<CuffableComponent, InteractionAttemptEvent>(CheckInteract);
+            SubscribeLocalEvent<CuffableComponent, RefreshMobConditionsEvent>(OnRefreshConditions);
 
             SubscribeLocalEvent<HandcuffComponent, AfterInteractEvent>(OnCuffAfterInteract);
             SubscribeLocalEvent<HandcuffComponent, MeleeHitEvent>(OnCuffMeleeHit);
@@ -92,10 +90,20 @@ namespace Content.Shared.Cuffs
             SubscribeLocalEvent<HandcuffComponent, VirtualItemDeletedEvent>(OnCuffVirtualItemDeleted);
         }
 
-        private void CheckInteract(Entity<CuffableComponent> ent, ref InteractionAttemptEvent args)
+        /// <summary>
+        /// A cuffed mob is restrained. What that blocks comes from <see cref="MobConditionSystem"/>,
+        /// so a call site can forgive restraint specifically.
+        /// </summary>
+        private void OnRefreshConditions(Entity<CuffableComponent> ent, ref RefreshMobConditionsEvent args)
         {
             if (!ent.Comp.CanStillInteract)
-                args.Cancelled = true;
+                args.Add(MobCondition.Restrained);
+        }
+
+        private void OnMapInit(Entity<CuffableComponent> ent, ref MapInitEvent args)
+        {
+            _conditions.EnsureConditions(ent);
+            _conditions.Refresh(ent.Owner);
         }
 
         private void OnUncuffAttempt(ref UncuffAttemptEvent args)
@@ -114,23 +122,16 @@ namespace Content.Shared.Cuffs
             // This is because the CanInteract blocking of the cuffs prevents self-uncuff.
             if (args.User == args.Target)
             {
-                if (!TryComp<CuffableComponent>(args.User, out var cuffable))
+                if (!HasComp<CuffableComponent>(args.User))
                 {
                     DebugTools.Assert($"{args.User} tried to uncuff themselves but they are not cuffable.");
                     return;
                 }
 
-                // We temporarily allow interactions so the cuffable system does not block itself.
-                // It's assumed that this will always be false.
-                // Otherwise they would not be trying to uncuff themselves.
-                cuffable.CanStillInteract = true;
-                Dirty(args.User, cuffable);
-
-                if (!_actionBlocker.CanInteract(args.User, args.User))
+                // Forgive the restraint itself, but nothing else: a stunned or unconscious mob still can't.
+                var req = new InteractionRequirements { Ignoring = MobCondition.Restrained };
+                if (!_actionBlocker.CanInteract(args.User, args.User, req))
                     args.Cancelled = true;
-
-                cuffable.CanStillInteract = false;
-                Dirty(args.User, cuffable);
             }
             else
             {
@@ -180,6 +181,12 @@ namespace Content.Shared.Cuffs
 
             component.CanStillInteract = canInteract;
             Dirty(uid, component);
+
+            // Commit the restraint before anything below can ask what the mob can do.
+            _conditions.EnsureConditions(uid);
+            _conditions.Refresh(uid);
+
+            // Restraint doesn't block movement by itself, but being pulled while cuffed does (HandleMoveAttempt).
             _actionBlocker.UpdateCanMove(uid);
 
             if (component.CanStillInteract)
