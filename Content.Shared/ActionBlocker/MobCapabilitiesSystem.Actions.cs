@@ -16,7 +16,7 @@ namespace Content.Shared.ActionBlocker;
 /// <summary>
 /// The consumer side of the bookkeeper: everything <see cref="ActionBlockerSystem"/> used to answer.
 /// </summary>
-public sealed partial class MobConditionSystem
+public sealed partial class MobCapabilitiesSystem
 {
     [Dependency] private SharedContainerSystem _container = default!;
 

@@ -8,22 +8,24 @@ namespace Content.Shared.ActionBlocker
     /// Utility methods to check if a specific entity is allowed to perform an action.
     /// </summary>
     /// <remarks>
-    /// Being replaced by <see cref="MobConditionSystem"/>, which every method here forwards to. New code should call
-    /// <see cref="MobConditionSystem.CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/>.
+    /// Replaced by <see cref="MobCapabilitiesSystem"/>, which every method here forwards to. New code should call
+    /// <see cref="MobCapabilitiesSystem.CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/>.
+    /// This forwarder stays for downstream code until the new API has been stable for a release, then goes.
     /// </remarks>
     [UsedImplicitly]
+    [Obsolete("Use MobCapabilitiesSystem instead. ActionBlockerSystem will be removed in a future release.")]
     public sealed partial class ActionBlockerSystem : EntitySystem
     {
-        [Dependency] private MobConditionSystem _conditions = default!;
+        [Dependency] private MobCapabilitiesSystem _capabilities = default!;
 
         public bool CanMove(EntityUid uid, InputMoverComponent? component = null)
         {
-            return _conditions.CanMove(uid, component);
+            return _capabilities.CanMove(uid, component);
         }
 
         public bool UpdateCanMove(EntityUid uid, InputMoverComponent? component = null)
         {
-            return _conditions.UpdateCanMove(uid, component);
+            return _capabilities.UpdateCanMove(uid, component);
         }
 
         /// <summary>
@@ -32,7 +34,7 @@ namespace Content.Shared.ActionBlocker
         /// </summary>
         public bool CanComplexInteract(EntityUid user)
         {
-            return _conditions.CanComplexInteract(user);
+            return _capabilities.CanComplexInteract(user);
         }
 
         /// <summary>
@@ -46,7 +48,7 @@ namespace Content.Shared.ActionBlocker
         /// </remarks>
         public bool CanInteract(EntityUid user, EntityUid? target)
         {
-            return _conditions.CanPerform(user, new InteractionRequirements { Action = MobAction.Interact }, target);
+            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.Interact }, target);
         }
 
         /// <summary>
@@ -54,7 +56,7 @@ namespace Content.Shared.ActionBlocker
         /// </summary>
         public bool CanUseHeldEntity(EntityUid user, EntityUid used)
         {
-            return _conditions.CanPerform(user, new InteractionRequirements { Action = MobAction.UseHeld }, used: used);
+            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.UseHeld }, used: used);
         }
 
         /// <summary>
@@ -65,12 +67,12 @@ namespace Content.Shared.ActionBlocker
         /// </remarks>
         public bool CanConsciouslyPerformAction(EntityUid user)
         {
-            return _conditions.CanPerform(user, new InteractionRequirements { Action = MobAction.Conscious });
+            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.Conscious });
         }
 
         public bool CanThrow(EntityUid user, EntityUid itemUid)
         {
-            return _conditions.CanPerform(user, new InteractionRequirements { Action = MobAction.Throw }, used: itemUid);
+            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.Throw }, used: itemUid);
         }
 
         /// <summary>
@@ -80,12 +82,12 @@ namespace Content.Shared.ActionBlocker
         /// <param name="uid">The mob to check.</param>
         public bool CanSpeak(EntityUid uid)
         {
-            return _conditions.CanPerform(uid, new InteractionRequirements { Action = MobAction.Speak });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Speak });
         }
 
         public bool CanDrop(EntityUid uid)
         {
-            return _conditions.CanPerform(uid, new InteractionRequirements { Action = MobAction.Drop });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Drop });
         }
 
         /// <summary>
@@ -96,22 +98,22 @@ namespace Content.Shared.ActionBlocker
         /// <param name="showPopup">Whether or not to show a popup to the player telling them why the attempt failed.</param>
         public bool CanPickup(EntityUid user, EntityUid item, bool showPopup = false)
         {
-            return _conditions.CanPickup(user, item, showPopup);
+            return _capabilities.CanPickup(user, item, showPopup);
         }
 
         public bool CanEmote(EntityUid uid)
         {
-            return _conditions.CanPerform(uid, new InteractionRequirements { Action = MobAction.Emote });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Emote });
         }
 
         public bool CanAttack(EntityUid uid, EntityUid? target = null, Entity<MeleeWeaponComponent>? weapon = null, bool disarm = false)
         {
-            return _conditions.CanAttack(uid, target, weapon, disarm);
+            return _capabilities.CanAttack(uid, target, weapon, disarm);
         }
 
         public bool CanChangeDirection(EntityUid uid)
         {
-            return _conditions.CanPerform(uid, new InteractionRequirements { Action = MobAction.ChangeDirection });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.ChangeDirection });
         }
     }
 }

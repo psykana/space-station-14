@@ -21,7 +21,7 @@ namespace Content.Shared.Mobs.Systems;
 public partial class MobStateSystem
 {
     /// <summary>
-    /// Critical and dead mobs are unconscious; <see cref="MobConditionSystem"/> derives everything that blocks.
+    /// Critical and dead mobs are unconscious; <see cref="MobCapabilitiesSystem"/> derives everything that blocks.
     /// </summary>
     [SubscribeLocalEvent]
     private void OnRefreshConditions(Entity<MobStateComponent> ent, ref RefreshMobConditionsEvent args)
@@ -33,8 +33,8 @@ public partial class MobStateSystem
     [SubscribeLocalEvent]
     private void OnMapInit(Entity<MobStateComponent> ent, ref MapInitEvent args)
     {
-        _conditions.EnsureConditions(ent);
-        _conditions.Refresh(ent.Owner);
+        _capabilities.EnsureConditions(ent);
+        _capabilities.Refresh(ent.Owner);
     }
 
     [SubscribeLocalEvent]
@@ -83,8 +83,8 @@ public partial class MobStateSystem
             return;
 
         // Commit the new conditions before anything below (standing, dropping) asks what the mob can do.
-        _conditions.EnsureConditions(target);
-        _conditions.Refresh(target);
+        _capabilities.EnsureConditions(target);
+        _capabilities.Refresh(target);
         switch (state)
         {
             case MobState.Alive:

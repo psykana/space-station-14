@@ -73,7 +73,7 @@ namespace Content.Shared.Interaction
         [Dependency] private TagSystem _tagSystem = default!;
         [Dependency] private UseDelaySystem _useDelay = default!;
         [Dependency] private ActivatableUISystem _activatableUI = default!;
-        [Dependency] private MobConditionSystem _conditions = default!;
+        [Dependency] private MobCapabilitiesSystem _capabilities = default!;
 
         [Dependency] private EntityQuery<IgnoreUIRangeComponent> _ignoreUiRangeQuery = default!;
         [Dependency] private EntityQuery<FixturesComponent> _fixtureQuery = default!;
@@ -1137,7 +1137,7 @@ namespace Content.Shared.Interaction
                 return false;
 
             if (!InteractionActivate(user.Value, uid, checkAccess: ShouldCheckAccess(user.Value)) &&
-                !_conditions.CanPerform(user.Value, new InteractionRequirements(), uid, null, out var reason) &&
+                !_capabilities.CanPerform(user.Value, new InteractionRequirements(), uid, null, out var reason) &&
                 reason != null)
             {
                 // Tell the player why nothing happened, if whatever blocked them said.

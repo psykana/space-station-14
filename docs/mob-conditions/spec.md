@@ -75,7 +75,7 @@ public enum MobCondition : ushort
 
 ### 2.2 `MobAction` — `MobCondition.cs`
 
-Each member names the attempt event that `MobConditionSystem` cancels for it.
+Each member names the attempt event that `MobCapabilitiesSystem` cancels for it.
 
 | Member | Bit | Attempt event (namespace) |
 |---|---|---|
@@ -102,7 +102,7 @@ Each member names the attempt event that `MobConditionSystem` cancels for it.
 
 ```csharp
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState(true)]
-[Access(typeof(MobConditionSystem))]
+[Access(typeof(MobCapabilitiesSystem))]
 public sealed partial class MobConditionsComponent : Component
 {
     [ViewVariables, AutoNetworkedField] public MobCondition Declared; // union of producer Adds, pre-cascade
@@ -111,7 +111,7 @@ public sealed partial class MobConditionsComponent : Component
 }
 ```
 
-- `Declared` is the only networked field. `MobConditionSystem` recomputes `Conditions` and
+- `Declared` is the only networked field. `MobCapabilitiesSystem` recomputes `Conditions` and
   `Blocked` from it in `AfterAutoHandleStateEvent`, so derived state can't drift from what the
   server sent.
 - Storing the pre-cascade set is what makes ignore masks cheap and predictable (§4.3):
@@ -213,7 +213,7 @@ public struct InteractionAttemptEvent(EntityUid uid, EntityUid? target, MobCondi
 
 ## 3. Normative tables
 
-### 3.1 Cascade — `MobConditionSystem.Expand(MobCondition) → MobCondition`
+### 3.1 Cascade — `MobCapabilitiesSystem.Expand(MobCondition) → MobCondition`
 
 The cascade is applied repeatedly until nothing changes, so the order of rules doesn't matter.
 
@@ -223,7 +223,7 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
 | `Restrained` | `HandsBlocked` |
 | `Incapacitated` or `HandsBlocked` | `UiBlocked \| PullBlocked` |
 
-### 3.2 Policy — `MobConditionSystem.GetBlocked(MobCondition) → MobAction`
+### 3.2 Policy — `MobCapabilitiesSystem.GetBlocked(MobCondition) → MobAction`
 
 | Condition | Blocks |
 |---|---|
@@ -264,9 +264,9 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
     knockdown path.
   - Covered by `ReviveAfterCritKnockdownStandsUp` (§13).
 
-## 4. `MobConditionSystem` — `MobConditionSystem.cs`
+## 4. `MobCapabilitiesSystem` — `MobCapabilitiesSystem.cs`
 
-`public sealed partial class MobConditionSystem : EntitySystem`. Its dependencies are
+`public sealed partial class MobCapabilitiesSystem : EntitySystem`. Its dependencies are
 `IGameTiming` and `ActionBlockerSystem`, and it caches an `EntityQuery<MobConditionsComponent>`.
 
 ### 4.1 Public API
@@ -392,7 +392,7 @@ blocked or unblocked. To catch this:
 > goes when its event is deleted. The cancel-only rule below carries over to the two
 > end-state events (§15.3).
 
-`MobConditionSystem` subscribes on `MobConditionsComponent` to every event in §2.2. Each
+`MobCapabilitiesSystem` subscribes on `MobConditionsComponent` to every event in §2.2. Each
 handler cancels when `(comp.Blocked & action) != 0`.
 
 - New code SHOULD use `[SubscribeLocalEvent]` attributes.
@@ -470,9 +470,9 @@ grant with a timeout, not something an ignore mask can express.
   `after: [typeof(MobStateSystem)]` (#45977). That ensures `MutedStatusEffectSystem` sees the
   event already cancelled for a dead mob and doesn't popup-spam.
 - The slice that moves Speak blocking MUST change this to
-  `after: [typeof(MobStateSystem), typeof(MobConditionSystem)]`.
+  `after: [typeof(MobStateSystem), typeof(MobCapabilitiesSystem)]`.
 - Once MobState no longer subscribes to Speak, it MUST be just
-  `after: [typeof(MobConditionSystem)]`.
+  `after: [typeof(MobCapabilitiesSystem)]`.
 - A test MUST cover "dead mime types in chat: no muted popup" (§13).
 
 ## 6. Producers
@@ -848,7 +848,7 @@ File: `Content.Shared/EntityConditions/Conditions/Body/MobConditionEntityConditi
 public sealed partial class MobConditionEntityConditionSystem
     : EntityConditionSystem<MobConditionsComponent, HasMobConditionCondition>
 {
-    [Dependency] private MobConditionSystem _conditions = default!;
+    [Dependency] private MobCapabilitiesSystem _conditions = default!;
     protected override void Condition(Entity<MobConditionsComponent> ent, ref EntityConditionEvent<HasMobConditionCondition> args)
         => args.Result = _conditions.HasCondition((ent, ent.Comp), args.Condition.Condition);
 }
@@ -858,7 +858,7 @@ public sealed partial class HasMobConditionCondition : EntityConditionBase<HasMo
     [DataField(required: true)] public MobCondition Condition;
     public override string EntityConditionGuidebookText(IPrototypeManager prototype) =>
         Loc.GetString("entity-condition-guidebook-has-mob-condition",
-            ("condition", MobConditionSystem.GetLocalizedName(Condition)));
+            ("condition", MobCapabilitiesSystem.GetLocalizedName(Condition)));
 }
 ```
 
@@ -911,7 +911,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 | Q7 | Are the §6.3 deltas acceptable? Frozen players can't drop, puppets can't attack or throw, spiked mobs can't interact, mobs in disposals can't use held items. | Each one is defensible, but each is a gameplay change. List it in that row's PR, or keep a residual event. |
 | Q8 | Should spectators be able to inspect `InHandsOnly` UIs, for example a PDA lying on the floor (§8.6)? | Ask maintainers. If no, step 1 of §8.1 returns `Close` for spectators when `comp.InHandsOnly`. |
 | Q9 | Should `BlockSpectators` stay entity-wide (today's `:159` behaviour) or become per-key like the rest of the policy (§8.1)? | Keep it entity-wide for slice 3 (parity), and revisit if a multi-key entity needs a mixed policy. |
-| Q10 | What is the bookkeeper called once it replaces `ActionBlockerSystem` (§15.1)? | Rename before the forwarding step (§15.5), while the API has one caller per method. `MobConditionSystem` undersells it: it answers for any entity, and it owns pair rules and target vetoes too. Ask maintainers. |
+| Q10 | What is the bookkeeper called once it replaces `ActionBlockerSystem` (§15.1)? | Rename before the forwarding step (§15.5), while the API has one caller per method. `MobCapabilitiesSystem` undersells it: it answers for any entity, and it owns pair rules and target vetoes too. Ask maintainers. |
 | Q11 | `BlockMovementComponent` blocks `ChangeDirection` as well as `Move`, but `Immobilized` doesn't (§16.1). Should `Immobilized` block `ChangeDirection`? | No: paralysed legs, chasms and tethers let you turn today. Give `BlockMovement` its own declared pair, `Immobilized` plus a direction lock, or let it declare `Incapacitated` if its users never need hands. Check its prototype users (`pda.yml`, `silicon.yml`, `mothershipcore.yml` and others) first. |
 | Q12 | `PostureLocked` blocks both `Stand` and `Down`, but the cryo pod only cancels `Down` today (§16.1). | Accept it: an occupant of a pod is already upright and can't move, so blocking `Stand` changes nothing observable. |
 | Q13 | Pair rules (§15.3) and target vetoes (§15.4) are not cached. Is that a performance problem? | Not yet. Only a handful of subscribers handle each event, and the hot path (bucket 1) stays cached. Measure before optimizing. |
@@ -919,7 +919,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 ## 12. PR slicing for upstream
 
 1. **Core plus the first producer.** This PR contains:
-   - the types (§2) and `MobConditionSystem` (§4–5), including the §4.5 consistency check;
+   - the types (§2) and `MobCapabilitiesSystem` (§4–5), including the §4.5 consistency check;
    - the `ActionBlockerSystem` overload and the `InteractionAttemptEvent.Ignoring` field;
    - the StationAi cancel-only fix (§5.1);
    - the component on `MobDamageable`;
@@ -972,7 +972,7 @@ A demo implements a vertical slice of the model, one commit per step.
 - failure reasons (§10.2) for self-uncuff and the activate key, through
   `CanPerform(..., out reason)`;
 - §15.5 step 1 (forwarding):
-  - The `ActionBlockerSystem` bodies live in the bookkeeper (`MobConditionSystem.Actions.cs`),
+  - The `ActionBlockerSystem` bodies live in the bookkeeper (`MobCapabilitiesSystem.Actions.cs`),
     and `ActionBlockerSystem` only forwards to it.
   - The bookkeeper checks conditions directly, and still subscribes only to the events raised
     elsewhere (Stand, StandUp, StartPull, Point).
@@ -1049,7 +1049,7 @@ buckle, pulling, hands, actions, changeling, vehicle, speech/muting.
 ### 15.1 Responsibilities
 
 One system, the *bookkeeper*, answers every "can this entity do X?" question. Its working name
-is `MobConditionSystem`; the final name is §11 Q10.
+is `MobCapabilitiesSystem`; the final name is §11 Q10.
 
 It owns four mechanisms, one per bucket of §16:
 
@@ -1358,7 +1358,7 @@ bookkeeper".
 **Findings from the second review that this resolves in the design:**
 - the routing of conditions through the legacy events, and the `Ignoring` field;
 - the two movement caches;
-- the circular dependency between `ActionBlockerSystem` and `MobConditionSystem`;
+- the circular dependency between `ActionBlockerSystem` and `MobCapabilitiesSystem`;
 - the vehicle re-entrancy, which becomes a cross-entity producer.
 
 ## Appendix B: review changelog (2026-10-20)

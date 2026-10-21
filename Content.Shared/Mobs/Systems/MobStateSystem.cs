@@ -11,7 +11,7 @@ namespace Content.Shared.Mobs.Systems;
 [Virtual]
 public partial class MobStateSystem : EntitySystem
 {
-    [Dependency] private MobConditionSystem _conditions = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private SharedAppearanceSystem _appearance = default!;
     [Dependency] private StandingStateSystem _standing = default!;
     [Dependency] private ISharedAdminLogManager _adminLogger = default!;

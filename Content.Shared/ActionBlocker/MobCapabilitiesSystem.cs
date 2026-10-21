@@ -16,7 +16,7 @@ namespace Content.Shared.ActionBlocker;
 /// cascades them and maps them to blocked <see cref="MobAction"/>s. Consumers ask
 /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/>.
 /// </summary>
-public sealed partial class MobConditionSystem : EntitySystem
+public sealed partial class MobCapabilitiesSystem : EntitySystem
 {
     [Dependency] private IConfigurationManager _cfg = default!;
     [Dependency] private IGameTiming _timing = default!;

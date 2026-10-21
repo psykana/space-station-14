@@ -16,7 +16,7 @@ public sealed partial class ActivatableUISystem : EntitySystem
 {
     [Dependency] private ISharedAdminManager _adminManager = default!;
     [Dependency] private ActionBlockerSystem _blockerSystem = default!;
-    [Dependency] private MobConditionSystem _conditions = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private SharedUserInterfaceSystem _uiSystem = default!;
     [Dependency] private SharedPopupSystem _popupSystem = default!;
     [Dependency] private SharedHandsSystem _hands = default!;

@@ -31,7 +31,7 @@ public abstract partial class SharedStunSystem : EntitySystem
     [Dependency] protected IGameTiming GameTiming = default!;
     [Dependency] private ISharedAdminLogManager _adminLogger = default!;
     [Dependency] protected ActionBlockerSystem Blocker = default!;
-    [Dependency] protected MobConditionSystem Conditions = default!;
+    [Dependency] protected MobCapabilitiesSystem Capabilities = default!;
     [Dependency] protected AlertsSystem Alerts = default!;
     [Dependency] private EntityWhitelistSystem _entityWhitelist = default!;
     [Dependency] private MovementSpeedModifierSystem _movementSpeedModifier = default!;
@@ -102,9 +102,9 @@ public abstract partial class SharedStunSystem : EntitySystem
     private void UpdateCanMove(EntityUid uid, StunnedComponent component, EntityEventArgs args)
     {
         if (args is ComponentStartup)
-            Conditions.EnsureConditions(uid);
+            Capabilities.EnsureConditions(uid);
 
-        Conditions.Refresh(uid);
+        Capabilities.Refresh(uid);
     }
 
     private void OnStunOnContactCollide(Entity<StunOnContactComponent> ent, ref StartCollideEvent args)

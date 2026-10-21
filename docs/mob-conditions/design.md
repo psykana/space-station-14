@@ -107,7 +107,7 @@ The model has three tiers, two closed enums, one component and one system, all i
   Point, Move, Stand, StandUp, Pull, ChangeDirection, UiAccess }
 ```
 
-**Cascades** (`MobConditionSystem.Expand`, applied to a fixed point):
+**Cascades** (`MobCapabilitiesSystem.Expand`, applied to a fixed point):
 
 | Condition | Implies |
 |---|---|
@@ -115,7 +115,7 @@ The model has three tiers, two closed enums, one component and one system, all i
 | `Restrained` | `HandsBlocked` |
 | `Incapacitated`, `HandsBlocked` | `UiBlocked \| PullBlocked` |
 
-**Policy** (`MobConditionSystem.GetBlocked`) is the single place where any condition blocks
+**Policy** (`MobCapabilitiesSystem.GetBlocked`) is the single place where any condition blocks
 anything:
 
 | Condition | Blocks |
@@ -188,7 +188,7 @@ condition is bit math on a stored field, so no source is ever re-polled on a hot
 gives the client the same answer as the server: a client could only re-poll the sources it can
 see.
 
-**Multiple sources need no refcounts.** `MobConditionSystem.Refresh` raises
+**Multiple sources need no refcounts.** `MobCapabilitiesSystem.Refresh` raises
 `RefreshMobConditionsEvent` and re-polls every source. Only the union is stored, so a source
 that stops applying simply stops declaring on the next refresh. Waking up while still cuffed
 unblocks nothing, because the cuffs re-declare on the same refresh.
@@ -283,7 +283,7 @@ It can't be replaced by the ignore mechanism: it is a stateful one-shot grant wi
 not a property of the mob. Moving it has an ordering consequence (spec §5.4). The muted status
 effect's Speak relay is ordered `after: [typeof(MobStateSystem)]`
 (`StatusEffectSystem.Relay.cs:60`, #45977) so that a dead mime typing doesn't spam "you can't
-speak" popups. That ordering must move to `MobConditionSystem` along with Speak.
+speak" popups. That ordering must move to `MobCapabilitiesSystem` along with Speak.
 
 ## 5. UI status tiers
 

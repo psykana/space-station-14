@@ -45,7 +45,7 @@ namespace Content.Shared.Cuffs
         [Dependency] private INetManager _net = default!;
         [Dependency] private ISharedAdminLogManager _adminLog = default!;
         [Dependency] private ActionBlockerSystem _actionBlocker = default!;
-        [Dependency] private MobConditionSystem _conditions = default!;
+        [Dependency] private MobCapabilitiesSystem _capabilities = default!;
         [Dependency] private AlertsSystem _alerts = default!;
         [Dependency] private SharedAudioSystem _audio = default!;
         [Dependency] private SharedContainerSystem _container = default!;
@@ -93,7 +93,7 @@ namespace Content.Shared.Cuffs
         }
 
         /// <summary>
-        /// A cuffed mob is restrained. What that blocks comes from <see cref="MobConditionSystem"/>,
+        /// A cuffed mob is restrained. What that blocks comes from <see cref="MobCapabilitiesSystem"/>,
         /// so a call site can forgive restraint specifically.
         /// </summary>
         private void OnRefreshConditions(Entity<CuffableComponent> ent, ref RefreshMobConditionsEvent args)
@@ -105,13 +105,13 @@ namespace Content.Shared.Cuffs
 
         private void OnRemove(Entity<CuffableComponent> ent, ref ComponentRemove args)
         {
-            _conditions.Refresh(ent.Owner);
+            _capabilities.Refresh(ent.Owner);
         }
 
         private void OnMapInit(Entity<CuffableComponent> ent, ref MapInitEvent args)
         {
-            _conditions.EnsureConditions(ent);
-            _conditions.Refresh(ent.Owner);
+            _capabilities.EnsureConditions(ent);
+            _capabilities.Refresh(ent.Owner);
         }
 
         private void OnUncuffAttempt(ref UncuffAttemptEvent args)
@@ -140,7 +140,7 @@ namespace Content.Shared.Cuffs
                 req.Ignoring = MobCondition.Restrained;
             }
 
-            if (!_conditions.CanPerform(args.User, req, args.Target, null, out var reason))
+            if (!_capabilities.CanPerform(args.User, req, args.Target, null, out var reason))
             {
                 args.Cancelled = true;
                 _popup.PopupEntity(reason ?? Loc.GetString("cuffable-component-cannot-interact-message"),
@@ -186,8 +186,8 @@ namespace Content.Shared.Cuffs
             Dirty(uid, component);
 
             // Commit the restraint before anything below can ask what the mob can do.
-            _conditions.EnsureConditions(uid);
-            _conditions.Refresh(uid);
+            _capabilities.EnsureConditions(uid);
+            _capabilities.Refresh(uid);
 
             // Restraint doesn't block movement by itself, but being pulled while cuffed does (HandleMoveAttempt).
             _actionBlocker.UpdateCanMove(uid);

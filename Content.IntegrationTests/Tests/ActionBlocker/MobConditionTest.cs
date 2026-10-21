@@ -16,12 +16,12 @@ using Robust.Shared.Localization;
 namespace Content.IntegrationTests.Tests.ActionBlocker;
 
 /// <summary>
-/// End-to-end tests for <see cref="MobConditionSystem"/> with its demo producers (mob state, stun, cuffs) and
+/// End-to-end tests for <see cref="MobCapabilitiesSystem"/> with its demo producers (mob state, stun, cuffs) and
 /// consumers (self-uncuff, paper read-only, the UI tiers). Every integration test also runs with
 /// <c>debug.mob_conditions_verify</c> on, which logs an error whenever a producer forgets to refresh.
 /// </summary>
 [TestFixture]
-[TestOf(typeof(MobConditionSystem))]
+[TestOf(typeof(MobCapabilitiesSystem))]
 public sealed class MobConditionTest : InteractionTest
 {
     private const string TestMob = "MobConditionTestMob";
@@ -60,12 +60,12 @@ public sealed class MobConditionTest : InteractionTest
     protected override string PlayerPrototype => TestMob;
 
     [SidedDependency(Side.Server)] private readonly ActionBlockerSystem _sBlocker = default!;
-    [SidedDependency(Side.Server)] private readonly MobConditionSystem _sConditions = default!;
+    [SidedDependency(Side.Server)] private readonly MobCapabilitiesSystem _sCapabilities = default!;
     [SidedDependency(Side.Server)] private readonly CuffableSystem _sCuffable = default!;
     [SidedDependency(Side.Server)] private readonly MobStateSystem _sMobState = default!;
     [SidedDependency(Side.Server)] private readonly SharedStunSystem _sStun = default!;
     [SidedDependency(Side.Server)] private readonly StatusEffectsSystem _sStatus = default!;
-    [SidedDependency(Side.Client)] private readonly MobConditionSystem _cConditions = default!;
+    [SidedDependency(Side.Client)] private readonly MobCapabilitiesSystem _cCapabilities = default!;
 
     private static readonly InteractionRequirements ForgiveRestraint = new() { Ignoring = MobCondition.Restrained };
 
@@ -129,14 +129,14 @@ public sealed class MobConditionTest : InteractionTest
         await Server.WaitAssertion(() =>
         {
             Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
-            Assert.That(_sConditions.CanPerform(SPlayer, ForgiveRestraint), Is.True);
+            Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.True);
         });
 
         await SetMobState(MobState.Critical);
 
         await Server.WaitAssertion(() =>
         {
-            Assert.That(_sConditions.CanPerform(SPlayer, ForgiveRestraint), Is.False,
+            Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.False,
                 "Forgiving restraint must not forgive unconsciousness.");
         });
     }
@@ -150,8 +150,8 @@ public sealed class MobConditionTest : InteractionTest
 
         await Server.WaitAssertion(() =>
         {
-            Assert.That(_sConditions.HasCondition(SPlayer, MobCondition.Restrained), Is.True);
-            Assert.That(_sConditions.HasCondition(SPlayer, MobCondition.Unconscious), Is.False);
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Restrained), Is.True);
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Unconscious), Is.False);
             Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
         });
 
@@ -175,7 +175,7 @@ public sealed class MobConditionTest : InteractionTest
                 Assert.That(_sBlocker.CanDrop(SPlayer), Is.False);
                 Assert.That(_sBlocker.CanChangeDirection(SPlayer), Is.False);
                 Assert.That(_sBlocker.CanMove(SPlayer), Is.False);
-                Assert.That(_sConditions.IsBlocked(SPlayer, MobAction.StandUp), Is.True);
+                Assert.That(_sCapabilities.IsBlocked(SPlayer, MobAction.StandUp), Is.True);
             });
 
             SEntMan.AddComponent<AllowNextCritSpeechComponent>(SPlayer);
@@ -205,8 +205,8 @@ public sealed class MobConditionTest : InteractionTest
                 Assert.That(_sBlocker.CanInteract(SPlayer, null), Is.False);
                 Assert.That(_sBlocker.CanMove(SPlayer), Is.False);
                 Assert.That(_sBlocker.CanSpeak(SPlayer), Is.True);
-                Assert.That(_sConditions.IsBlocked(SPlayer, MobAction.Point), Is.False);
-                Assert.That(_sConditions.CanPerform(SPlayer, ForgiveRestraint), Is.False);
+                Assert.That(_sCapabilities.IsBlocked(SPlayer, MobAction.Point), Is.False);
+                Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.False);
             });
         });
 
@@ -235,7 +235,7 @@ public sealed class MobConditionTest : InteractionTest
             Assert.That(cComp.Blocked, Is.EqualTo(sComp.Blocked));
 
             // Stun is still an independent cause, so forgiving restraint must not help on the client either.
-            Assert.That(_cConditions.IsBlocked(CPlayer, MobAction.Interact, MobCondition.Restrained), Is.True);
+            Assert.That(_cCapabilities.IsBlocked(CPlayer, MobAction.Interact, MobCondition.Restrained), Is.True);
         });
 
         await Stun(false);
@@ -243,8 +243,8 @@ public sealed class MobConditionTest : InteractionTest
 
         await Client.WaitAssertion(() =>
         {
-            Assert.That(_cConditions.IsBlocked(CPlayer, MobAction.Interact), Is.True);
-            Assert.That(_cConditions.IsBlocked(CPlayer, MobAction.Interact, MobCondition.Restrained), Is.False);
+            Assert.That(_cCapabilities.IsBlocked(CPlayer, MobAction.Interact), Is.True);
+            Assert.That(_cCapabilities.IsBlocked(CPlayer, MobAction.Interact, MobCondition.Restrained), Is.False);
         });
     }
 
@@ -285,7 +285,7 @@ public sealed class MobConditionTest : InteractionTest
             SEntMan.EventBus.RaiseEvent(EventSource.Local, ref ev);
             Assert.That(ev.Cancelled, Is.True, "A stunned mob uncuffed itself.");
 
-            Assert.That(_sConditions.TryGetBlockedReason(SPlayer, MobAction.Interact, out var reason, MobCondition.Restrained));
+            Assert.That(_sCapabilities.TryGetBlockedReason(SPlayer, MobAction.Interact, out var reason, MobCondition.Restrained));
             Assert.That(reason, Is.EqualTo(Loc.GetString("mob-condition-blocked-incapacitated")));
         });
     }

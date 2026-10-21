@@ -7,7 +7,7 @@ namespace Content.Shared.ActionBlocker;
 /// Only <see cref="Declared"/> is networked; the rest is derived from it.
 /// </summary>
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState(true)]
-[Access(typeof(MobConditionSystem))]
+[Access(typeof(MobCapabilitiesSystem))]
 public sealed partial class MobConditionsComponent : Component
 {
     /// <summary>

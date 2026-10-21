@@ -22,30 +22,30 @@ public sealed partial class ActivatableUISystem
                 return UiStatus.Close;
 
             // TODO MOB CONDITIONS: let spectators inspect complex UIs once opening them has no side effects.
-            if (comp?.RequiresComplex == true && !_conditions.CanComplexInteract(user))
+            if (comp?.RequiresComplex == true && !_capabilities.CanComplexInteract(user))
                 return UiStatus.Close;
 
             return UiStatus.ReadOnly;
         }
 
         // An unconscious mind can't have a UI open at all, unlike a stunned or restrained one.
-        if (_conditions.HasCondition(user, MobCondition.Unconscious))
+        if (_capabilities.HasCondition(user, MobCondition.Unconscious))
             return UiStatus.Close;
 
         if (comp?.AdminOnly == true && !_adminManager.IsAdmin(user))
             return UiStatus.Close;
 
-        if (comp?.RequiresComplex == true && !_conditions.CanComplexInteract(user))
+        if (comp?.RequiresComplex == true && !_capabilities.CanComplexInteract(user))
             return UiStatus.Close;
 
         var req = new InteractionRequirements { Action = MobAction.UiAccess };
-        if (_conditions.CanPerform(user, req, target))
+        if (_capabilities.CanPerform(user, req, target))
             return UiStatus.Interactive;
 
         if (comp != null && comp.ReadOnlyConditions != MobCondition.None)
         {
             req.Ignoring = comp.ReadOnlyConditions;
-            if (_conditions.CanPerform(user, req, target))
+            if (_capabilities.CanPerform(user, req, target))
                 return UiStatus.ReadOnly;
         }
 

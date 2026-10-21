@@ -4,7 +4,7 @@ namespace Content.Shared.ActionBlocker;
 
 /// <summary>
 /// A closed vocabulary of things that can be wrong with a mob. Producers declare these during
-/// <see cref="RefreshMobConditionsEvent"/>; <see cref="MobConditionSystem"/> cascades them and maps them to
+/// <see cref="RefreshMobConditionsEvent"/>; <see cref="MobCapabilitiesSystem"/> cascades them and maps them to
 /// blocked <see cref="MobAction"/>s. A member must not be added unless something declares or derives it.
 /// </summary>
 [Flags, Serializable, NetSerializable]
@@ -61,7 +61,7 @@ public enum MobCondition : ushort
 
 /// <summary>
 /// The actions a <see cref="MobCondition"/> can block. Each member corresponds to the attempt event that
-/// <see cref="MobConditionSystem"/> cancels for it.
+/// <see cref="MobCapabilitiesSystem"/> cancels for it.
 /// </summary>
 [Flags, Serializable, NetSerializable]
 public enum MobAction : uint
