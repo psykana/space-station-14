@@ -72,22 +72,7 @@ namespace Content.Shared.ActionBlocker
         /// <returns></returns>
         public bool CanInteract(EntityUid user, EntityUid? target)
         {
-            if (!CanConsciouslyPerformAction(user))
-                return false;
-
-            var ev = new InteractionAttemptEvent(user, target);
-            RaiseLocalEvent(user, ref ev);
-
-            if (ev.Cancelled)
-                return false;
-
-            if (target == null || target == user)
-                return true;
-
-            var targetEv = new GettingInteractedWithAttemptEvent(user, target);
-            RaiseLocalEvent(target.Value, ref targetEv);
-
-            return !targetEv.Cancelled;
+            return CanInteractLegacy(user, target, MobCondition.None);
         }
 
         /// <summary>
