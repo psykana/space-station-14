@@ -312,7 +312,12 @@ public sealed partial class MobConditionSystem : EntitySystem
     [SubscribeLocalEvent]
     private void OnHandleState(Entity<MobConditionsComponent> ent, ref AfterAutoHandleStateEvent args)
     {
+        var oldBlocked = ent.Comp.Blocked;
         Derive(ent.Comp);
+
+        // Producers may have recomputed CanMove earlier in this state application, against the stale cache.
+        if (((oldBlocked ^ ent.Comp.Blocked) & MobAction.Move) != 0)
+            _blocker.UpdateCanMove(ent);
     }
 
     #endregion

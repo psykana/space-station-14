@@ -31,6 +31,7 @@ public abstract partial class SharedStunSystem : EntitySystem
     [Dependency] protected IGameTiming GameTiming = default!;
     [Dependency] private ISharedAdminLogManager _adminLogger = default!;
     [Dependency] protected ActionBlockerSystem Blocker = default!;
+    [Dependency] protected MobConditionSystem Conditions = default!;
     [Dependency] protected AlertsSystem Alerts = default!;
     [Dependency] private EntityWhitelistSystem _entityWhitelist = default!;
     [Dependency] private MovementSpeedModifierSystem _movementSpeedModifier = default!;
@@ -47,15 +48,8 @@ public abstract partial class SharedStunSystem : EntitySystem
 
         SubscribeLocalEvent<StunOnContactComponent, StartCollideEvent>(OnStunOnContactCollide);
 
-        // Attempt event subscriptions.
-        SubscribeLocalEvent<StunnedComponent, ChangeDirectionAttemptEvent>(OnAttempt);
-        SubscribeLocalEvent<StunnedComponent, UpdateCanMoveEvent>(OnMoveAttempt);
-        SubscribeLocalEvent<StunnedComponent, InteractionAttemptEvent>(OnAttemptInteract);
-        SubscribeLocalEvent<StunnedComponent, UseAttemptEvent>(OnAttempt);
-        SubscribeLocalEvent<StunnedComponent, ThrowAttemptEvent>(OnAttempt);
-        SubscribeLocalEvent<StunnedComponent, DropAttemptEvent>(OnAttempt);
-        SubscribeLocalEvent<StunnedComponent, AttackAttemptEvent>(OnAttempt);
-        SubscribeLocalEvent<StunnedComponent, PickupAttemptEvent>(OnAttempt);
+        // Attempt event subscriptions. Everything else a stun blocks comes from the mob conditions it declares.
+        SubscribeLocalEvent<StunnedComponent, RefreshMobConditionsEvent>(OnRefreshConditions);
         SubscribeLocalEvent<StunnedComponent, IsEquippingAttemptEvent>(OnEquipAttempt);
         SubscribeLocalEvent<StunnedComponent, IsUnequippingAttemptEvent>(OnUnequipAttempt);
         SubscribeLocalEvent<MobStateComponent, MobStateChangedEvent>(OnMobStateChanged);
@@ -71,11 +65,6 @@ public abstract partial class SharedStunSystem : EntitySystem
         // Stun Appearance Data
         InitializeKnockdown();
         InitializeAppearance();
-    }
-
-    private void OnAttemptInteract(Entity<StunnedComponent> ent, ref InteractionAttemptEvent args)
-    {
-        args.Cancelled = true;
     }
 
     private void OnMobStateChanged(EntityUid uid, MobStateComponent component, MobStateChangedEvent args)
@@ -112,6 +101,12 @@ public abstract partial class SharedStunSystem : EntitySystem
 
     private void UpdateCanMove(EntityUid uid, StunnedComponent component, EntityEventArgs args)
     {
+        if (args is ComponentStartup)
+            Conditions.EnsureConditions(uid);
+
+        Conditions.Refresh(uid);
+
+        // Refresh does nothing while applying a server state, but the client still needs CanMove recomputed here.
         Blocker.UpdateCanMove(uid);
     }
 
@@ -380,17 +375,14 @@ public abstract partial class SharedStunSystem : EntitySystem
 
     #region Attempt Event Handling
 
-    private void OnMoveAttempt(EntityUid uid, StunnedComponent stunned, UpdateCanMoveEvent args)
+    /// <summary>
+    /// A stunned mob can't act or move, but stays awake.
+    /// </summary>
+    private void OnRefreshConditions(Entity<StunnedComponent> ent, ref RefreshMobConditionsEvent args)
     {
-        if (stunned.LifeStage > ComponentLifeStage.Running)
-            return;
-
-        args.Cancel();
-    }
-
-    private void OnAttempt(EntityUid uid, StunnedComponent stunned, CancellableEntityEventArgs args)
-    {
-        args.Cancel();
+        // Still subscribed while being removed; the removal refresh must not re-declare.
+        if (ent.Comp.LifeStage <= ComponentLifeStage.Running)
+            args.Add(MobCondition.Incapacitated | MobCondition.Immobilized);
     }
 
     private void OnEquipAttempt(EntityUid uid, StunnedComponent stunned, IsEquippingAttemptEvent args)
