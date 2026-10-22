@@ -43,7 +43,7 @@ public abstract partial class SharedStunSystem : EntitySystem
 
     public override void Initialize()
     {
-        SubscribeLocalEvent<StunnedComponent, ComponentStartup>(UpdateCanMove);
+        SubscribeLocalEvent<StunnedComponent, ComponentStartup>(RefreshConditions);
         SubscribeLocalEvent<StunnedComponent, ComponentShutdown>(OnStunShutdown);
 
         SubscribeLocalEvent<StunOnContactComponent, StartCollideEvent>(OnStunOnContactCollide);
@@ -95,15 +95,12 @@ public abstract partial class SharedStunSystem : EntitySystem
     private void OnStunShutdown(Entity<StunnedComponent> ent, ref ComponentShutdown args)
     {
         // This exists so the client can end their funny animation if they're playing one.
-        UpdateCanMove(ent, ent.Comp, args);
+        RefreshConditions(ent, ent.Comp, args);
         Appearance.RemoveData(ent, StunVisuals.SeeingStars);
     }
 
-    private void UpdateCanMove(EntityUid uid, StunnedComponent component, EntityEventArgs args)
+    private void RefreshConditions(EntityUid uid, StunnedComponent component, EntityEventArgs args)
     {
-        if (args is ComponentStartup)
-            Capabilities.EnsureConditions(uid);
-
         Capabilities.Refresh(uid);
     }
 

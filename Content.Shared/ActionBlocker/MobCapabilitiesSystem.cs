@@ -171,29 +171,26 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// Re-polls every producer and caches the result. Producers call this whenever their own state changes,
     /// before anything else can observe the change.
     /// </summary>
+    /// <remarks>
+    /// An entity without <see cref="MobConditionsComponent"/> gets one the first time a producer declares something
+    /// on it, so producers never need to add it themselves. Mobs normally have it from their prototype.
+    /// </remarks>
     public void Refresh(Entity<MobConditionsComponent?> ent)
     {
-        if (!_query.Resolve(ent, ref ent.Comp, false) || TerminatingOrDeleted(ent))
-            return;
-
         // Declared arrives with the server state.
-        if (_timing.ApplyingState)
+        if (_timing.ApplyingState || TerminatingOrDeleted(ent))
             return;
 
-        if (!_polling.Add(ent))
-        {
-            Log.Error($"Re-entrant {nameof(Refresh)} of {ToPrettyString(ent)}. {nameof(RefreshMobConditionsEvent)} handlers must only call Add.");
+        if (!TryPoll(ent, out var declared))
             return;
-        }
 
-        MobCondition declared;
-        try
+        if (!_query.Resolve(ent, ref ent.Comp, false))
         {
-            declared = GetDeclared(ent);
-        }
-        finally
-        {
-            _polling.Remove(ent);
+            // The component's startup refreshes again and commits.
+            if (declared != MobCondition.None)
+                AddComp<MobConditionsComponent>(ent);
+
+            return;
         }
 
         if (declared == ent.Comp.Declared)
@@ -216,18 +213,6 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
             var ev = new MobConditionsChangedEvent(ent, oldConditions, ent.Comp.Conditions);
             RaiseLocalEvent(ent, ref ev, true);
         }
-    }
-
-    /// <summary>
-    /// Adds <see cref="MobConditionsComponent"/> if it is missing. Does nothing while applying a server state or
-    /// for an entity that is being deleted.
-    /// </summary>
-    public void EnsureConditions(EntityUid uid)
-    {
-        if (_timing.ApplyingState || TerminatingOrDeleted(uid))
-            return;
-
-        EnsureComp<MobConditionsComponent>(uid);
     }
 
     /// <summary>
@@ -323,6 +308,30 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
 
 
     #region Implementation
+
+    /// <summary>
+    /// Polls the producers, refusing a re-entrant poll of the same entity.
+    /// </summary>
+    private bool TryPoll(EntityUid uid, out MobCondition declared)
+    {
+        declared = MobCondition.None;
+
+        if (!_polling.Add(uid))
+        {
+            Log.Error($"Re-entrant {nameof(Refresh)} of {ToPrettyString(uid)}. {nameof(RefreshMobConditionsEvent)} handlers must only call Add.");
+            return false;
+        }
+
+        try
+        {
+            declared = GetDeclared(uid);
+            return true;
+        }
+        finally
+        {
+            _polling.Remove(uid);
+        }
+    }
 
     private MobCondition GetDeclared(EntityUid uid)
     {

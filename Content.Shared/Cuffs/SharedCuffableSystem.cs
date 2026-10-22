@@ -69,9 +69,6 @@ namespace Content.Shared.Cuffs
             SubscribeLocalEvent<CuffableComponent, EntInsertedIntoContainerMessage>(OnCuffsInsertedIntoContainer);
             SubscribeLocalEvent<CuffableComponent, RejuvenateEvent>(OnRejuvenate);
             SubscribeLocalEvent<CuffableComponent, ComponentInit>(OnStartup);
-            SubscribeLocalEvent<CuffableComponent, MapInitEvent>(OnMapInit);
-            // Not ComponentShutdown: the client already subscribes to that.
-            SubscribeLocalEvent<CuffableComponent, ComponentRemove>(OnRemove);
             SubscribeLocalEvent<CuffableComponent, AttemptStopPullingEvent>(HandleStopPull);
             SubscribeLocalEvent<CuffableComponent, RemoveCuffsAlertEvent>(OnRemoveCuffsAlert);
             SubscribeLocalEvent<CuffableComponent, UpdateCanMoveEvent>(HandleMoveAttempt);
@@ -101,17 +98,6 @@ namespace Content.Shared.Cuffs
             // Still subscribed while being removed; the removal refresh must not re-declare.
             if (!ent.Comp.CanStillInteract && ent.Comp.LifeStage <= ComponentLifeStage.Running)
                 args.Add(MobCondition.Restrained);
-        }
-
-        private void OnRemove(Entity<CuffableComponent> ent, ref ComponentRemove args)
-        {
-            _capabilities.Refresh(ent.Owner);
-        }
-
-        private void OnMapInit(Entity<CuffableComponent> ent, ref MapInitEvent args)
-        {
-            _capabilities.EnsureConditions(ent);
-            _capabilities.Refresh(ent.Owner);
         }
 
         private void OnUncuffAttempt(ref UncuffAttemptEvent args)
@@ -186,7 +172,6 @@ namespace Content.Shared.Cuffs
             Dirty(uid, component);
 
             // Commit the restraint before anything below can ask what the mob can do.
-            _capabilities.EnsureConditions(uid);
             _capabilities.Refresh(uid);
 
             // Restraint doesn't block movement by itself, but being pulled while cuffed does (HandleMoveAttempt).

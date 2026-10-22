@@ -31,13 +31,6 @@ public partial class MobStateSystem
     }
 
     [SubscribeLocalEvent]
-    private void OnMapInit(Entity<MobStateComponent> ent, ref MapInitEvent args)
-    {
-        _capabilities.EnsureConditions(ent);
-        _capabilities.Refresh(ent.Owner);
-    }
-
-    [SubscribeLocalEvent]
     private void OnUnbuckleAttempt(Entity<MobStateComponent> ent, ref UnbuckleAttemptEvent args)
     {
         // TODO is this necessary?
@@ -83,7 +76,6 @@ public partial class MobStateSystem
             return;
 
         // Commit the new conditions before anything below (standing, dropping) asks what the mob can do.
-        _capabilities.EnsureConditions(target);
         _capabilities.Refresh(target);
         switch (state)
         {
