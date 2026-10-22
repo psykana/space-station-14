@@ -366,18 +366,24 @@ consequences:
 
 ### 4.4 Component presence
 
-- Every producer MUST `EnsureComp<MobConditionsComponent>` when its source first applies
-  (startup, `MapInit` or `ComponentInit`), then call `Refresh`, with two exceptions:
-  - It MUST NOT `EnsureComp` while `IGameTiming.ApplyingState`. The component arrives with the
-    server state. The precedent is `SharedStunSystem.OnStunStatusApplied`
-    (`SharedStunSystem.cs:336–342`).
-  - It MUST NOT `EnsureComp` on a `TerminatingOrDeleted` entity.
-- On removal (`ComponentShutdown` or `ComponentRemove`), a producer only calls `Refresh`. It never
-  calls `EnsureComp`.
-- `MobConditionsComponent`'s own `ComponentStartup` calls `Refresh`.
-- `- type: MobConditions` is also added to `MobDamageable` in
-  `Resources/Prototypes/Entities/Mobs/base.yml`, next to `MobState`, so that ordinary mobs
-  have it from spawn.
+- **Producers never add the component.** `Refresh` adds `MobConditionsComponent` itself the first
+  time a producer declares something on an entity that lacks it. The component's startup then
+  refreshes again and commits.
+  - Not while `IGameTiming.ApplyingState`: the component arrives with the server state.
+  - Not on a `TerminatingOrDeleted` entity.
+- **Producers don't subscribe to lifecycle events just for the bookkeeper.** The engine allows
+  one subscription per component and event pair, so a new `MapInit` or `ComponentRemove`
+  subscription on a widely used component such as `MobStateComponent` or `CuffableComponent`
+  can crash a fork that already has one.
+  - A producer refreshes from code paths it already owns: its own component's startup and
+    shutdown, and its own state changes.
+  - Cuffs refresh in `UpdateCuffState`. `CuffableComponent` is never removed at runtime
+    upstream, so there is no removal hook. Removing it with VV or `rmcomp` leaves `Restrained`
+    cached until the next refresh. The §4.5 check catches that in tests.
+- `MobConditionsComponent`'s own `ComponentStartup` calls `Refresh`, which covers mobs spawned
+  already dead or cuffed.
+- `- type: MobConditions` is on `MobDamageable` in `Resources/Prototypes/Entities/Mobs/base.yml`,
+  next to `MobState`, so ordinary mobs have it from spawn. Anything else gets it lazily.
 
 ### 4.5 Cache consistency (DEBUG and tests)
 
@@ -491,7 +497,7 @@ grant with a timeout, not something an ignore mask can express.
    subscribed during removal, and the removal refresh must not re-declare.
 3. Call `Refresh` when the source starts applying, when it is removed, and whenever the
    producer's own state flips (for example `CanStillInteract`, `CanGhostInteract`, a mob-state
-   change). Follow §4.4 for `EnsureComp`.
+   change). Never add the component yourself (§4.4).
 4. **Refresh first.** In the code path that changes the producer's state, `Refresh` MUST run
    before any further event is raised or any `CanX` is called.
    - Before this design, every check ran live. Now it reads a cache, so any handler that runs
@@ -921,6 +927,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 | Q11 | `BlockMovementComponent` blocks `ChangeDirection` as well as `Move`, but `Immobilized` doesn't (§16.1). Should `Immobilized` block `ChangeDirection`? | No: paralysed legs, chasms and tethers let you turn today. Give `BlockMovement` its own declared pair, `Immobilized` plus a direction lock, or let it declare `Incapacitated` if its users never need hands. Check its prototype users (`pda.yml`, `silicon.yml`, `mothershipcore.yml` and others) first. |
 | Q12 | `PostureLocked` blocks both `Stand` and `Down`, but the cryo pod only cancels `Down` today (§16.1). | Accept it: an occupant of a pod is already upright and can't move, so blocking `Stand` changes nothing observable. |
 | Q13 | Pair rules (§15.3) and target vetoes (§15.4) are not cached. Is that a performance problem? | Not yet. Only a handful of subscribers handle each event, and the hot path (bucket 1) stays cached. Measure before optimizing. |
+| Q14 | `MobCapabilitiesSystem.CanPickup(…, showPopup: true)` shows whatever reason blocked the pickup. But `SharedHandsSystem.TryPickup` hardwires `showPopup: true` (`SharedHandsSystem.Pickup.cs:90`), including for its ~95 programmatic callers such as `PickupOrDrop`. So an item handed to a stunned, cuffed or crit mob pops up "You can't do that while incapacitated" although nobody tried anything. | **Proposed fix:** show the reason in the consumer that knows a person initiated the action. (1) The bookkeeper never shows popups: `CanPickup` returns the reason, and `showPopup` only feeds the legacy pickup events. (2) `SharedHandsSystem.CanPickupToHand(…, showPopup)` shows the reason when asked. (3) `TryPickup` and `TryPickupAnyHand` take `bool showPopup = false` instead of hardwiring `true`, and the player-initiated paths pass `true`: picking up by clicking (`SharedItemSystem.OnHandInteract`, `Item/SharedItemSystem.cs:135`) and ejecting from item slots, which already passes it. Programmatic pickups then show no popup at all, not even the multi-handed message. That is correct, because nobody tried anything. Not implemented yet. |
 
 ## 12. PR slicing for upstream
 
@@ -1197,6 +1204,7 @@ dependency: `ActionBlockerSystem` depends on the bookkeeper, never the other way
   bookkeeper instead of raising their own attempt events. The bookkeeper therefore subscribes to
   no attempt event at all. Stand up keeps its in/out event data through a typed `CanStandUp`.
 - All of §16.2.
+- Producers no longer add the component or hook lifecycle events for the bookkeeper (§4.4).
 
 ### 15.6 Vocabulary changes
 
@@ -1280,7 +1288,7 @@ Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migra
 | `SharedVirtualItemSystem` (`Inventory/VirtualItem/SharedVirtualItemSystem.cs:44`) | GettingInteractedWith | **Done.** A virtual item can't be interacted with (`Interact`, `UiAccess`). |
 | `SharedSubFloorHideSystem` (`SubFloor/SharedSubFloorHideSystem.cs:40–41`) | GettingInteractedWith, GettingAttacked | **Done.** Can't touch or attack things hidden under the floor. Users with `BypassInteractionChecksComponent` are exempt from the touching part. |
 | `MultiHandedItemSystem` (`Item/MultiHandedItemSystem.cs:19`) | GettingPickedUp | **Done.** Needs enough free hands. Its popup became `Reason`, which `CanPickup(…, showPopup: true)` shows. |
-| `SharedMechSystem.Relay` (`Mech/EntitySystems/SharedMechSystem.Relay.cs:9`) | GettingAttacked | **Done.** Relays the `Attack` veto to the pilot as `MechPilotRelayedEvent<MobActionTargetAttemptEvent>`. The guardian's relayed handler moved with it. |
+| `SharedMechSystem.Relay` (`Mech/EntitySystems/SharedMechSystem.Relay.cs:9`) | GettingAttacked | **Done.** Relays the `Attack` veto to the pilot as `MechPilotRelayedEvent<MobActionTargetAttemptEvent>`, and the guardian's relayed handler moved with it. It also keeps relaying the obsolete `GettingAttackedAttemptEvent`, so downstream subscribers of `MechPilotRelayedEvent<GettingAttackedAttemptEvent>` keep working until the removal release. |
 | client `DragDropSystem` (`Content.Client/Interaction/DragDropSystem.cs:521`) | raised GettingInteractedWith by hand for the dragged entity | **Done.** Asks `CanPerform` about the dragged entity instead. |
 | none | `GettingUsedAttemptEvent`, `ThrowItemAttemptEvent` | No subscribers. |
 
@@ -1359,6 +1367,31 @@ code needs these changes:
   - The EntityCondition bridge (§10).
   - The #46045 range cancel and open veto, which must be kept (§8.2).
   - The open side-effect audit (§8.5) and the cache consistency check (§4.5).
+
+## Appendix D: third review (2026-10-22)
+
+The third adversarial review of the code. Fixed:
+- **The mech relay** keeps relaying the obsolete `GettingAttackedAttemptEvent`, so downstream
+  subscribers of the relayed form aren't silently dropped (§16.2).
+- **Producers no longer add `MobConditionsComponent` or subscribe to `MapInit` or
+  `ComponentRemove` for it** (§4.4). `Refresh` adds the component lazily. That removes the
+  `EnsureConditions` API, and the fork-collision risk of new lifecycle subscriptions on
+  `MobStateComponent` and `CuffableComponent`.
+
+Decided:
+- **`CanShiver` and `CanSweat`** stay deleted rather than deprecated: nothing ever cancelled
+  them.
+- **Code that raises a typed attempt event itself**, instead of asking the bookkeeper, no longer
+  gets condition blocking from MobState, stun or cuffs. That is accepted: the events are for
+  the bookkeeper to raise.
+
+Open:
+- **The pickup popup** (Q14), with a proposed fix.
+- **The generic events concentrate subscription collisions:** one system per component may
+  subscribe to `MobActionTargetAttemptEvent` or `MobActionAttemptEvent`. Decide before bucket 3
+  adds more handlers.
+- **Smaller items:** the namespace and the `InteractionRequirements` name, drag-and-drop's
+  stricter check, reason overwriting, test gaps, and the items carried over from Appendix B.
 
 ## Appendix C: end-state revision (2026-10-21)
 

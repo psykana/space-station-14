@@ -487,8 +487,13 @@ restraint.
   condition makes its condition unforgivable, which silently defeats ignore-masks. Migrate one
   producer per commit.
 - **Blocking depends on the component being present.** Blocking now depends on
-  `MobConditionsComponent` existing. Every producer `EnsureComp`s it rather than relying on
-  every mob prototype inheriting it from `MobDamageable`.
+  `MobConditionsComponent` existing.
+  - Mobs get it from `MobDamageable`.
+  - Anything else gets it from the bookkeeper the first time a producer declares a condition on
+    it.
+  - Producers never add it, and never hook lifecycle events like `MapInit` for it. That matters
+    for forks: the engine allows one subscription per component and event pair, so a new
+    lifecycle hook on a popular component can collide with one a fork already has.
 - **Stale cache.** Today every blocker is evaluated live. After the change, a producer that
   forgets to refresh, or refreshes too late, leaves a mob wrongly blocked or wrongly free.
   - The same goes for a field that is changed without its setter, for example through VV.
