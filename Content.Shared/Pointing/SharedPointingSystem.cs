@@ -21,7 +21,7 @@ public abstract class SharedPointingSystem : EntitySystem
 
     public bool CanPoint(EntityUid uid)
     {
-        return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Point });
+        return _capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Point });
     }
 }
 

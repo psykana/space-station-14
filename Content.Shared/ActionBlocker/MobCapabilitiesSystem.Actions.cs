@@ -38,7 +38,7 @@ public sealed partial class MobCapabilitiesSystem
         bool Disarm = false);
 
     /// <summary>
-    /// Whether <paramref name="user"/> can perform <see cref="InteractionRequirements.Action"/>, on
+    /// Whether <paramref name="user"/> has every capability in <see cref="InteractionRequirements.Required"/>, on
     /// <paramref name="target"/> and with <paramref name="used"/> if given.
     /// </summary>
     public bool CanPerform(EntityUid user,
@@ -62,11 +62,11 @@ public sealed partial class MobCapabilitiesSystem
 
     /// <summary>
     /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/> for
-    /// <see cref="MobAction.Pickup"/>, with the legacy popup flag.
+    /// <see cref="MobCapability.Pickup"/>, with the legacy popup flag.
     /// </summary>
     public bool CanPickup(EntityUid user, EntityUid item, bool showPopup = false)
     {
-        var req = new InteractionRequirements { Action = MobAction.Pickup };
+        var req = new InteractionRequirements { Required = MobCapability.Pickup };
         if (Perform(user, req, item, null, new LegacyArgs(ShowPopup: showPopup), out var reason))
             return true;
 
@@ -78,14 +78,14 @@ public sealed partial class MobCapabilitiesSystem
 
     /// <summary>
     /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/> for
-    /// <see cref="MobAction.Attack"/>, with the weapon and the disarm flag.
+    /// <see cref="MobCapability.Attack"/>, with the weapon and the disarm flag.
     /// </summary>
     public bool CanAttack(EntityUid user,
         EntityUid? target = null,
         Entity<MeleeWeaponComponent>? weapon = null,
         bool disarm = false)
     {
-        var req = new InteractionRequirements { Action = MobAction.Attack };
+        var req = new InteractionRequirements { Required = MobCapability.Attack };
         return Perform(user, req, target, weapon?.Owner, new LegacyArgs(Weapon: weapon, Disarm: disarm), out _);
     }
 
@@ -113,7 +113,7 @@ public sealed partial class MobCapabilitiesSystem
         if (!_moverQuery.Resolve(uid, ref mover, false))
             return false;
 
-        var canMove = !IsBlocked(uid, MobAction.Move);
+        var canMove = !IsBlocked(uid, MobCapability.Move);
         if (canMove)
         {
             var ev = new UpdateCanMoveEvent(uid);
@@ -132,12 +132,12 @@ public sealed partial class MobCapabilitiesSystem
 
     /// <summary>
     /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/> for
-    /// <see cref="MobAction.StandUp"/>. The legacy event carries data back out (autostand, a message), so the caller
+    /// <see cref="MobCapability.StandUp"/>. The legacy event carries data back out (autostand, a message), so the caller
     /// supplies it.
     /// </summary>
     public bool CanStandUp(EntityUid uid, ref StandUpAttemptEvent ev)
     {
-        var req = new InteractionRequirements { Action = MobAction.StandUp };
+        var req = new InteractionRequirements { Required = MobCapability.StandUp };
 
         if (!CheckSelf(uid, req, out _))
         {
@@ -149,7 +149,7 @@ public sealed partial class MobCapabilitiesSystem
         if (ev.Cancelled)
             return false;
 
-        if (!CheckRules(uid, req.Action, null, null, out _))
+        if (!CheckRules(uid, req.Required, null, null, out _))
         {
             ev.Cancelled = true;
             return false;
@@ -169,10 +169,10 @@ public sealed partial class MobCapabilitiesSystem
             return false;
 
         // Sources that haven't migrated yet still cancel their attempt events.
-        if (!RaiseLegacyAttempts(user, req.Action, target, used, legacy))
+        if (!RaiseLegacyAttempts(user, req.Required, target, used, legacy))
             return false;
 
-        return CheckRules(user, req.Action, target, used, out reason);
+        return CheckRules(user, req.Required, target, used, out reason);
     }
 
     /// <summary>
@@ -182,25 +182,33 @@ public sealed partial class MobCapabilitiesSystem
     {
         reason = null;
 
-        if (IsBlocked(user, req.Action, req.Ignoring) && !TryUseLastWords(user, req.Action))
+        if (IsBlocked(user, req.Required, req.Ignoring) && !TryUseLastWords(user, req.Required))
         {
-            if (TryGetBlockedReason(user, req.Action, out var conditionReason, req.Ignoring))
+            if (TryGetBlockedReason(user, req.Required, out var conditionReason, req.Ignoring))
                 reason = conditionReason;
 
             return false;
         }
 
-        return !req.NeedComplex || CanComplexInteract(user);
+        return (req.Required & GetPropertyBlocked(user)) == 0;
+    }
+
+    /// <summary>
+    /// The capabilities this kind of creature lacks, whatever its conditions. Read at query time: they change rarely.
+    /// </summary>
+    private MobCapability GetPropertyBlocked(EntityUid user)
+    {
+        return _complexQuery.HasComp(user) ? MobCapability.None : MobCapability.Complex;
     }
 
     /// <summary>
     /// Rules about this user and target, then things that can't be acted on at all.
     /// </summary>
-    private bool CheckRules(EntityUid user, MobAction action, EntityUid? target, EntityUid? used, out string? reason)
+    private bool CheckRules(EntityUid user, MobCapability required, EntityUid? target, EntityUid? used, out string? reason)
     {
         reason = null;
 
-        var ev = new MobActionAttemptEvent(user, action, target, used);
+        var ev = new MobActionAttemptEvent(user, required, target, used);
         RaiseLocalEvent(user, ref ev);
         if (ev.Cancelled)
         {
@@ -208,11 +216,11 @@ public sealed partial class MobCapabilitiesSystem
             return false;
         }
 
-        if (target != null && target != user && !TargetAllows(user, action, target.Value, used, out reason))
+        if (target != null && target != user && !TargetAllows(user, required, target.Value, used, out reason))
             return false;
 
-        if (used != null && action is MobAction.UseHeld or MobAction.Throw &&
-            !TargetAllows(user, action, used.Value, used, out reason))
+        if (used != null && (required & (MobCapability.UseHeld | MobCapability.Throw)) != 0 &&
+            !TargetAllows(user, required, used.Value, used, out reason))
         {
             return false;
         }
@@ -223,183 +231,184 @@ public sealed partial class MobCapabilitiesSystem
     /// <summary>
     /// Last words: a one-shot grant with a timeout, so not something an ignore mask can express.
     /// </summary>
-    private bool TryUseLastWords(EntityUid user, MobAction action)
+    private bool TryUseLastWords(EntityUid user, MobCapability required)
     {
-        if (action != MobAction.Speak || !_critSpeechQuery.HasComp(user))
+        if ((required & MobCapability.Speak) == 0 || !_critSpeechQuery.HasComp(user))
             return false;
 
         RemCompDeferred<AllowNextCritSpeechComponent>(user);
         return true;
     }
 
-    private bool TargetAllows(EntityUid user, MobAction action, EntityUid target, EntityUid? used, out string? reason)
+    private bool TargetAllows(EntityUid user, MobCapability required, EntityUid target, EntityUid? used, out string? reason)
     {
-        var ev = new MobActionTargetAttemptEvent(user, action, used);
+        var ev = new MobActionTargetAttemptEvent(user, required, used);
         RaiseLocalEvent(target, ref ev);
         reason = ev.Reason;
         return !ev.Cancelled;
     }
 
     /// <summary>
-    /// Raises the typed attempt events that <see cref="ActionBlockerSystem"/> used to raise. Each one is deleted once
-    /// its last subscriber has moved to conditions, rules or properties (spec §16).
+    /// Raises the typed attempt events that <see cref="ActionBlockerSystem"/> used to raise, once for each required
+    /// capability that has one. Each one is deleted once its last subscriber has moved to conditions, rules or
+    /// properties (spec §16).
     /// </summary>
     // The obsolete target events have no upstream subscribers left, but downstream code may still subscribe to them
     // until they are removed.
 #pragma warning disable CS0618
-    private bool RaiseLegacyAttempts(EntityUid user, MobAction action, EntityUid? target, EntityUid? used, LegacyArgs legacy)
+    private bool RaiseLegacyAttempts(EntityUid user, MobCapability required, EntityUid? target, EntityUid? used, LegacyArgs legacy)
     {
-        switch (action)
+        // Interact and UiAccess share their legacy events, and both include the consciousness check.
+        if ((required & (MobCapability.Interact | MobCapability.UiAccess)) != 0)
         {
-            case MobAction.None:
-                return true;
+            if (!RaiseConsciousAttempt(user))
+                return false;
 
-            case MobAction.Conscious:
-                return RaiseConsciousAttempt(user);
+            var ev = new InteractionAttemptEvent(user, target);
+            RaiseLocalEvent(user, ref ev);
+            if (ev.Cancelled)
+                return false;
 
-            case MobAction.Interact:
-            case MobAction.UiAccess:
+            if (target != null && target != user)
             {
-                if (!RaiseConsciousAttempt(user))
-                    return false;
-
-                var ev = new InteractionAttemptEvent(user, target);
-                RaiseLocalEvent(user, ref ev);
-                if (ev.Cancelled)
-                    return false;
-
-                if (target == null || target == user)
-                    return true;
-
                 var targetEv = new GettingInteractedWithAttemptEvent(user, target);
                 RaiseLocalEvent(target.Value, ref targetEv);
-                return !targetEv.Cancelled;
-            }
-
-            case MobAction.UseHeld:
-            {
-                if (used == null)
-                    return true;
-
-                var ev = new UseAttemptEvent(user, used.Value);
-                RaiseLocalEvent(user, ev);
-                if (ev.Cancelled)
+                if (targetEv.Cancelled)
                     return false;
-
-                var usedEv = new GettingUsedAttemptEvent(user);
-                RaiseLocalEvent(used.Value, usedEv);
-                return !usedEv.Cancelled;
             }
+        }
+        else if ((required & MobCapability.Conscious) != 0 && !RaiseConsciousAttempt(user))
+        {
+            return false;
+        }
 
-            case MobAction.Pickup:
-            {
-                if (target == null)
-                    return true;
+        if ((required & MobCapability.UseHeld) != 0 && used != null)
+        {
+            var ev = new UseAttemptEvent(user, used.Value);
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
 
-                var ev = new PickupAttemptEvent(user, target.Value, legacy.ShowPopup);
-                RaiseLocalEvent(user, ev);
-                if (ev.Cancelled)
-                    return false;
-
-                var itemEv = new GettingPickedUpAttemptEvent(user, target.Value, legacy.ShowPopup);
-                RaiseLocalEvent(target.Value, itemEv);
-                return !itemEv.Cancelled;
-            }
-
-            case MobAction.Drop:
-            {
-                var ev = new DropAttemptEvent();
-                RaiseLocalEvent(user, ev);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.Throw:
-            {
-                if (used == null)
-                    return true;
-
-                var ev = new ThrowAttemptEvent(user, used.Value);
-                RaiseLocalEvent(user, ev);
-                if (ev.Cancelled)
-                    return false;
-
-                var itemEv = new ThrowItemAttemptEvent(user);
-                RaiseLocalEvent(used.Value, ref itemEv);
-                return !itemEv.Cancelled;
-            }
-
-            case MobAction.Attack:
-                return RaiseAttackAttempts(user, target, legacy);
-
-            case MobAction.Speak:
-            {
-                // Raised broadcast too.
-                var ev = new SpeakAttemptEvent(user);
-                RaiseLocalEvent(user, ev, true);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.Emote:
-            {
-                // Raised broadcast too.
-                var ev = new EmoteAttemptEvent(user);
-                RaiseLocalEvent(user, ev, true);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.ChangeDirection:
-            {
-                var ev = new ChangeDirectionAttemptEvent(user);
-                RaiseLocalEvent(user, ev);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.Stand:
-            {
-                var ev = new StandAttemptEvent();
-                RaiseLocalEvent(user, ev);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.Down:
-            {
-                var ev = new DownAttemptEvent();
-                RaiseLocalEvent(user, ev);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.StandUp:
-            {
-                // Callers that need the event's data use CanStandUp.
-                var ev = new StandUpAttemptEvent();
-                RaiseLocalEvent(user, ref ev);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.Pull:
-            {
-                if (target == null)
-                    return true;
-
-                // Raised broadcast too.
-                var ev = new StartPullAttemptEvent(user, target.Value);
-                RaiseLocalEvent(user, ev, true);
-                return !ev.Cancelled;
-            }
-
-            case MobAction.Point:
-            {
-                // Raised broadcast too.
-                var ev = new PointAttemptEvent(user);
-                RaiseLocalEvent(user, ev, true);
-                return !ev.Cancelled;
-            }
-
-            default:
-                // Move is a cache: use CanMove.
-                Log.Error($"{nameof(CanPerform)} does not support {action}.");
+            var usedEv = new GettingUsedAttemptEvent(user);
+            RaiseLocalEvent(used.Value, usedEv);
+            if (usedEv.Cancelled)
                 return false;
         }
+
+        if ((required & MobCapability.Pickup) != 0 && target != null)
+        {
+            var ev = new PickupAttemptEvent(user, target.Value, legacy.ShowPopup);
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
+
+            var itemEv = new GettingPickedUpAttemptEvent(user, target.Value, legacy.ShowPopup);
+            RaiseLocalEvent(target.Value, itemEv);
+            if (itemEv.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Drop) != 0)
+        {
+            var ev = new DropAttemptEvent();
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Attack) != 0 && !RaiseAttackAttempts(user, target, legacy))
+            return false;
+
+        if ((required & MobCapability.Throw) != 0 && used != null)
+        {
+            var ev = new ThrowAttemptEvent(user, used.Value);
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
+
+            var itemEv = new ThrowItemAttemptEvent(user);
+            RaiseLocalEvent(used.Value, ref itemEv);
+            if (itemEv.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Speak) != 0)
+        {
+            // Raised broadcast too.
+            var ev = new SpeakAttemptEvent(user);
+            RaiseLocalEvent(user, ev, true);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Emote) != 0)
+        {
+            // Raised broadcast too.
+            var ev = new EmoteAttemptEvent(user);
+            RaiseLocalEvent(user, ev, true);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Point) != 0)
+        {
+            // Raised broadcast too.
+            var ev = new PointAttemptEvent(user);
+            RaiseLocalEvent(user, ev, true);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Move) != 0)
+        {
+            // Move is a cache: use CanMove.
+            Log.Error($"{nameof(CanPerform)} does not support {MobCapability.Move}.");
+            return false;
+        }
+
+        if ((required & MobCapability.Stand) != 0)
+        {
+            var ev = new StandAttemptEvent();
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Pull) != 0 && target != null)
+        {
+            // Raised broadcast too.
+            var ev = new StartPullAttemptEvent(user, target.Value);
+            RaiseLocalEvent(user, ev, true);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.ChangeDirection) != 0)
+        {
+            var ev = new ChangeDirectionAttemptEvent(user);
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.StandUp) != 0)
+        {
+            // Callers that need the event's data use CanStandUp.
+            var ev = new StandUpAttemptEvent();
+            RaiseLocalEvent(user, ref ev);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        if ((required & MobCapability.Down) != 0)
+        {
+            var ev = new DownAttemptEvent();
+            RaiseLocalEvent(user, ev);
+            if (ev.Cancelled)
+                return false;
+        }
+
+        return true;
     }
 
 #pragma warning restore CS0618

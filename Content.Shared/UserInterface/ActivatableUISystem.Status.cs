@@ -38,7 +38,7 @@ public sealed partial class ActivatableUISystem
         if (comp?.RequiresComplex == true && !_capabilities.CanComplexInteract(user))
             return UiStatus.Close;
 
-        var req = new InteractionRequirements { Action = MobAction.UiAccess };
+        var req = new InteractionRequirements { Required = MobCapability.UiAccess };
         if (_capabilities.CanPerform(user, req, target))
             return UiStatus.Interactive;
 

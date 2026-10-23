@@ -103,7 +103,7 @@ public sealed partial class StandingStateSystem : EntitySystem
         if (!standingState.Standing)
             return true;
 
-        if (!force && !_capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Down }))
+        if (!force && !_capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Down }))
             return false;
 
         standingState.Standing = false;
@@ -144,7 +144,7 @@ public sealed partial class StandingStateSystem : EntitySystem
         if (standingState.Standing)
             return true;
 
-        if (!force && !_capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Stand }))
+        if (!force && !_capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Stand }))
             return false;
 
         standingState.Standing = true;

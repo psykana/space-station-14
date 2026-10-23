@@ -38,7 +38,7 @@ public sealed partial class MultiHandedItemSystem : EntitySystem
 
     private void OnTargetAttempt(Entity<MultiHandedItemComponent> ent, ref MobActionTargetAttemptEvent args)
     {
-        if (args.Action != MobAction.Pickup || _hands.CountFreeHands(args.User) >= ent.Comp.HandsNeeded)
+        if ((args.Required & MobCapability.Pickup) == 0 || _hands.CountFreeHands(args.User) >= ent.Comp.HandsNeeded)
             return;
 
         args.Cancelled = true;

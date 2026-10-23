@@ -80,17 +80,14 @@ namespace Content.Shared.SubFloor
             if (!component.BlockInteractions || !component.IsUnderCover)
                 return;
 
-            switch (args.Action)
+            if ((args.Required & MobCapability.Attack) != 0)
+                args.Cancelled = true;
+
+            // Allow admins (e.g., mappers/aghosts) to twiddle with stuff under subfloors
+            if ((args.Required & (MobCapability.Interact | MobCapability.UiAccess)) != 0 &&
+                !HasComp<BypassInteractionChecksComponent>(args.User))
             {
-                case MobAction.Attack:
-                    args.Cancelled = true;
-                    break;
-                case MobAction.Interact:
-                case MobAction.UiAccess:
-                    // Allow admins (e.g., mappers/aghosts) to twiddle with stuff under subfloors
-                    if (!HasComp<BypassInteractionChecksComponent>(args.User))
-                        args.Cancelled = true;
-                    break;
+                args.Cancelled = true;
             }
         }
 

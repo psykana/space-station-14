@@ -27,7 +27,7 @@ public sealed partial class MobConditionsComponent : Component
     /// The actions blocked by <see cref="Conditions"/>.
     /// </summary>
     [ViewVariables]
-    public MobAction Blocked;
+    public MobCapability Blocked;
 }
 
 /// <summary>

@@ -474,7 +474,7 @@ public sealed partial class PullingSystem : EntitySystem
         var getPulled = new BeingPulledAttemptEvent(puller, pullableUid);
         RaiseLocalEvent(pullableUid, getPulled, true);
         var canPull = _capabilities.CanPerform(puller,
-            new InteractionRequirements { Action = MobAction.Pull },
+            new InteractionRequirements { Required = MobCapability.Pull },
             pullableUid);
         return canPull && !getPulled.Cancelled;
     }

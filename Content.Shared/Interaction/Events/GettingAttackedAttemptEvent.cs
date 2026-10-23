@@ -4,5 +4,5 @@ namespace Content.Shared.Interaction.Events;
 /// Raised directed on the target entity when being attacked.
 /// </summary>
 [ByRefEvent]
-[Obsolete("Subscribe to MobActionTargetAttemptEvent and check for MobAction.Attack. This event will be removed in a future release.")]
+[Obsolete("Subscribe to MobActionTargetAttemptEvent and check for MobCapability.Attack. This event will be removed in a future release.")]
 public record struct GettingAttackedAttemptEvent(EntityUid Attacker, EntityUid? Weapon, bool Disarm, bool Cancelled = false);

@@ -9,7 +9,7 @@ public abstract partial class SharedMechSystem
     [SubscribeLocalEvent]
     private void OnTargetAttempt(Entity<MechComponent> ent, ref MobActionTargetAttemptEvent args)
     {
-        if (args.Action == MobAction.Attack)
+        if ((args.Required & MobCapability.Attack) != 0)
             RelayRefToPilot(ent, ref args);
     }
 

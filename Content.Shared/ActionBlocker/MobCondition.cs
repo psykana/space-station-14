@@ -5,7 +5,7 @@ namespace Content.Shared.ActionBlocker;
 /// <summary>
 /// A closed vocabulary of things that can be wrong with a mob. Producers declare these during
 /// <see cref="RefreshMobConditionsEvent"/>; <see cref="MobCapabilitiesSystem"/> cascades them and maps them to
-/// blocked <see cref="MobAction"/>s. A member must not be added unless something declares or derives it.
+/// blocked <see cref="MobCapability"/>s. A member must not be added unless something declares or derives it.
 /// </summary>
 [Flags, Serializable, NetSerializable]
 public enum MobCondition : ushort
@@ -60,11 +60,12 @@ public enum MobCondition : ushort
 }
 
 /// <summary>
-/// The actions a <see cref="MobCondition"/> can block. Each member corresponds to the attempt event that
-/// <see cref="MobCapabilitiesSystem"/> cancels for it.
+/// Things a mob can do. A requirement is a mask of them: a caller asks for every capability its act needs.
+/// Conditions block most members; <see cref="Complex"/> is a creature property instead. Each member names the legacy
+/// attempt event <see cref="MobCapabilitiesSystem"/> still raises for it.
 /// </summary>
 [Flags, Serializable, NetSerializable]
-public enum MobAction : uint
+public enum MobCapability : uint
 {
     None = 0,
 
@@ -121,4 +122,11 @@ public enum MobAction : uint
     /// crit and death lie the mob down.
     /// </summary>
     Down = 1 << 16,
+
+    /// <summary>
+    /// Has the hands and wits for complex interactions, through
+    /// <see cref="Content.Shared.Interaction.Components.ComplexInteractionComponent"/>. A creature property: no condition
+    /// blocks it, and there is no attempt event.
+    /// </summary>
+    Complex = 1 << 17,
 }

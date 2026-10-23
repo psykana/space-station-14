@@ -48,7 +48,7 @@ namespace Content.Shared.ActionBlocker
         /// </remarks>
         public bool CanInteract(EntityUid user, EntityUid? target)
         {
-            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.Interact }, target);
+            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.Interact }, target);
         }
 
         /// <summary>
@@ -56,7 +56,7 @@ namespace Content.Shared.ActionBlocker
         /// </summary>
         public bool CanUseHeldEntity(EntityUid user, EntityUid used)
         {
-            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.UseHeld }, used: used);
+            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.UseHeld }, used: used);
         }
 
         /// <summary>
@@ -67,12 +67,12 @@ namespace Content.Shared.ActionBlocker
         /// </remarks>
         public bool CanConsciouslyPerformAction(EntityUid user)
         {
-            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.Conscious });
+            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.Conscious });
         }
 
         public bool CanThrow(EntityUid user, EntityUid itemUid)
         {
-            return _capabilities.CanPerform(user, new InteractionRequirements { Action = MobAction.Throw }, used: itemUid);
+            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.Throw }, used: itemUid);
         }
 
         /// <summary>
@@ -82,12 +82,12 @@ namespace Content.Shared.ActionBlocker
         /// <param name="uid">The mob to check.</param>
         public bool CanSpeak(EntityUid uid)
         {
-            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Speak });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Speak });
         }
 
         public bool CanDrop(EntityUid uid)
         {
-            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Drop });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Drop });
         }
 
         /// <summary>
@@ -103,7 +103,7 @@ namespace Content.Shared.ActionBlocker
 
         public bool CanEmote(EntityUid uid)
         {
-            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.Emote });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Emote });
         }
 
         public bool CanAttack(EntityUid uid, EntityUid? target = null, Entity<MeleeWeaponComponent>? weapon = null, bool disarm = false)
@@ -113,7 +113,7 @@ namespace Content.Shared.ActionBlocker
 
         public bool CanChangeDirection(EntityUid uid)
         {
-            return _capabilities.CanPerform(uid, new InteractionRequirements { Action = MobAction.ChangeDirection });
+            return _capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.ChangeDirection });
         }
     }
 }

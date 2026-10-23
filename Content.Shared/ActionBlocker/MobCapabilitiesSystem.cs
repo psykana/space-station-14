@@ -9,7 +9,7 @@ namespace Content.Shared.ActionBlocker;
 /// <summary>
 /// The bookkeeper: owns the decision of what an entity can do, and is replacing <see cref="ActionBlockerSystem"/>.
 /// Producers declare <see cref="MobCondition"/>s through <see cref="RefreshMobConditionsEvent"/>; this system
-/// cascades them and maps them to blocked <see cref="MobAction"/>s. Consumers ask
+/// cascades them and maps them to blocked <see cref="MobCapability"/>s. Consumers ask
 /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/>.
 /// </summary>
 public sealed partial class MobCapabilitiesSystem : EntitySystem
@@ -80,38 +80,38 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     }
 
     /// <summary>
-    /// The single place where a condition blocks an action.
+    /// The single place where a condition blocks a capability.
     /// </summary>
-    public static MobAction GetBlocked(MobCondition conditions)
+    public static MobCapability GetBlocked(MobCondition conditions)
     {
-        var blocked = MobAction.None;
+        var blocked = MobCapability.None;
 
         if ((conditions & MobCondition.Unconscious) != 0)
-            blocked |= MobAction.Conscious | MobAction.Speak | MobAction.Emote | MobAction.Point | MobAction.StandUp;
+            blocked |= MobCapability.Conscious | MobCapability.Speak | MobCapability.Emote | MobCapability.Point | MobCapability.StandUp;
 
         if ((conditions & MobCondition.Incapacitated) != 0)
         {
-            blocked |= MobAction.Interact | MobAction.UseHeld | MobAction.Pickup | MobAction.Drop |
-                       MobAction.Attack | MobAction.Throw | MobAction.ChangeDirection;
+            blocked |= MobCapability.Interact | MobCapability.UseHeld | MobCapability.Pickup | MobCapability.Drop |
+                       MobCapability.Attack | MobCapability.Throw | MobCapability.ChangeDirection;
         }
 
         if ((conditions & MobCondition.HandsBlocked) != 0)
-            blocked |= MobAction.Interact | MobAction.UseHeld | MobAction.Pickup | MobAction.Drop | MobAction.Attack;
+            blocked |= MobCapability.Interact | MobCapability.UseHeld | MobCapability.Pickup | MobCapability.Drop | MobCapability.Attack;
 
         if ((conditions & MobCondition.Incorporeal) != 0)
-            blocked |= MobAction.Interact | MobAction.UseHeld | MobAction.Pickup | MobAction.Drop | MobAction.Emote;
+            blocked |= MobCapability.Interact | MobCapability.UseHeld | MobCapability.Pickup | MobCapability.Drop | MobCapability.Emote;
 
         if ((conditions & MobCondition.Immobilized) != 0)
-            blocked |= MobAction.Move;
+            blocked |= MobCapability.Move;
 
         if ((conditions & MobCondition.Floored) != 0)
-            blocked |= MobAction.Stand;
+            blocked |= MobCapability.Stand;
 
         if ((conditions & MobCondition.UiBlocked) != 0)
-            blocked |= MobAction.UiAccess;
+            blocked |= MobCapability.UiAccess;
 
         if ((conditions & MobCondition.PullBlocked) != 0)
-            blocked |= MobAction.Pull;
+            blocked |= MobCapability.Pull;
 
         return blocked;
     }
@@ -127,11 +127,11 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     }
 
     /// <summary>
-    /// Every declared condition that would block <paramref name="action"/> on its own, once
+    /// Every declared condition that would block <paramref name="required"/> on its own, once
     /// <paramref name="ignoring"/> is forgiven.
     /// </summary>
     public static MobCondition GetBlockingConditions(MobCondition declared,
-        MobAction action,
+        MobCapability required,
         MobCondition ignoring = MobCondition.None)
     {
         var result = MobCondition.None;
@@ -142,7 +142,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
             if ((declared & condition) == 0)
                 continue;
 
-            if ((GetBlocked(Effective(condition, ignoring)) & action) != 0)
+            if ((GetBlocked(Effective(condition, ignoring)) & required) != 0)
                 result |= condition;
         }
 
@@ -204,7 +204,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
         Derive(ent.Comp);
         Dirty(ent);
 
-        if (((oldBlocked ^ ent.Comp.Blocked) & MobAction.Move) != 0)
+        if (((oldBlocked ^ ent.Comp.Blocked) & MobCapability.Move) != 0)
             UpdateCanMove(ent);
 
         if (oldConditions != ent.Comp.Conditions)
@@ -224,55 +224,55 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     }
 
     /// <summary>
-    /// Whether any of <paramref name="action"/> is blocked for this mob.
+    /// Whether any of <paramref name="required"/> is blocked for this mob.
     /// </summary>
-    public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobAction action)
+    public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobCapability required)
     {
         if (!_query.Resolve(ent, ref ent.Comp, false))
             return false;
 
         Verify((ent, ent.Comp));
-        return (ent.Comp.Blocked & action) != 0;
+        return (ent.Comp.Blocked & required) != 0;
     }
 
     /// <summary>
-    /// Whether any of <paramref name="action"/> is blocked for this mob, forgiving <paramref name="ignoring"/>.
+    /// Whether any of <paramref name="required"/> is blocked for this mob, forgiving <paramref name="ignoring"/>.
     /// </summary>
-    public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobAction action, MobCondition ignoring)
+    public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobCapability required, MobCondition ignoring)
     {
         if (ignoring == MobCondition.None)
-            return IsBlocked(ent, action);
+            return IsBlocked(ent, required);
 
         if (!_query.Resolve(ent, ref ent.Comp, false))
             return false;
 
         Verify((ent, ent.Comp));
-        return (GetBlocked(Effective(ent.Comp.Declared, ignoring)) & action) != 0;
+        return (GetBlocked(Effective(ent.Comp.Declared, ignoring)) & required) != 0;
     }
 
     /// <summary>
-    /// Every declared condition that blocks <paramref name="action"/> on its own, once <paramref name="ignoring"/>
+    /// Every declared condition that blocks <paramref name="required"/> on its own, once <paramref name="ignoring"/>
     /// is forgiven.
     /// </summary>
     public MobCondition GetBlockingConditions(Entity<MobConditionsComponent?> ent,
-        MobAction action,
+        MobCapability required,
         MobCondition ignoring = MobCondition.None)
     {
         if (!_query.Resolve(ent, ref ent.Comp, false))
             return MobCondition.None;
 
-        return GetBlockingConditions(ent.Comp.Declared, action, ignoring);
+        return GetBlockingConditions(ent.Comp.Declared, required, ignoring);
     }
 
     /// <summary>
-    /// Gets a localized "you can't do that while ..." message for why <paramref name="action"/> is blocked.
+    /// Gets a localized "you can't do that while ..." message for why <paramref name="required"/> is blocked.
     /// </summary>
     public bool TryGetBlockedReason(Entity<MobConditionsComponent?> ent,
-        MobAction action,
+        MobCapability required,
         out string reason,
         MobCondition ignoring = MobCondition.None)
     {
-        var condition = PickReason(GetBlockingConditions(ent, action, ignoring));
+        var condition = PickReason(GetBlockingConditions(ent, required, ignoring));
         if (condition == MobCondition.None)
         {
             reason = string.Empty;
@@ -300,7 +300,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
         Derive(ent.Comp);
 
         // Producers may have recomputed CanMove earlier in this state application, against the stale cache.
-        if (((oldBlocked ^ ent.Comp.Blocked) & MobAction.Move) != 0)
+        if (((oldBlocked ^ ent.Comp.Blocked) & MobCapability.Move) != 0)
             UpdateCanMove(ent);
     }
 

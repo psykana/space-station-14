@@ -368,7 +368,7 @@ public abstract partial class SharedStunSystem
         if (!KnockdownOver(entity))
             return false;
 
-        return Capabilities.CanPerform(entity, new InteractionRequirements { Action = MobAction.StandUp });
+        return Capabilities.CanPerform(entity, new InteractionRequirements { Required = MobCapability.StandUp });
     }
 
     private bool StandingBlocked(Entity<KnockedDownComponent> entity)
