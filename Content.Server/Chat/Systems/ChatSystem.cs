@@ -12,6 +12,7 @@ using Content.Shared.GameTicking;
 using Content.Shared.Ghost.Components;
 using Content.Shared.Mobs.Systems;
 using Content.Shared.Players.RateLimiting;
+using Content.Shared.Popups;
 using Content.Shared.Speech.EntitySystems;
 using Robust.Server.Player;
 using Robust.Shared.Audio.Systems;
@@ -40,6 +41,7 @@ public sealed partial class ChatSystem : SharedChatSystem
     [Dependency] private IAdminLogManager _adminLogger = default!;
     [Dependency] private ActionBlockerSystem _actionBlocker = default!;
     [Dependency] private MobCapabilitiesSystem _capabilities = default!;
+    [Dependency] private SharedPopupSystem _popup = default!;
     [Dependency] private ServerStationSystem _stationSystem = default!;
     [Dependency] private MobStateSystem _mobStateSystem = default!;
     [Dependency] private SharedAudioSystem _audio = default!;

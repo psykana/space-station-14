@@ -57,6 +57,11 @@ public enum MobCondition : ushort
     /// No physical presence, like a spectating ghost.
     /// </summary>
     Incorporeal = 1 << 8,
+
+    /// <summary>
+    /// Cannot speak: muted, a mime's vow, a puppet nobody holds.
+    /// </summary>
+    Silenced = 1 << 9,
 }
 
 /// <summary>

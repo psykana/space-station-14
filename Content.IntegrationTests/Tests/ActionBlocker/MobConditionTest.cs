@@ -31,6 +31,8 @@ public sealed class MobConditionTest : InteractionTest
     private const string TestMob = "MobConditionTestMob";
     private const string TestCuffs = "MobConditionTestCuffs";
     private const string PaperProto = "Paper";
+    private const string MutedEffect = "StatusEffectMuted";
+    private const string MimeMutedEffect = "StatusEffectMimeMuted";
 
     [TestPrototypes]
     private const string Prototypes = @"
@@ -110,6 +112,25 @@ public sealed class MobConditionTest : InteractionTest
         });
         await RunTicks(1);
         Assert.That(HasComp<StunnedComponent>(Player), Is.EqualTo(stunned));
+    }
+
+    private async Task Mute(string effect, bool muted, TimeSpan? delay = null)
+    {
+        await Server.WaitPost(() =>
+        {
+            if (muted)
+                Assert.That(_sStatus.TrySetStatusEffectDuration(SPlayer, effect, delay: delay), "Failed to mute the player.");
+            else
+                Assert.That(_sStatus.TryRemoveStatusEffect(SPlayer, effect), "Failed to unmute the player.");
+        });
+        await RunTicks(1);
+    }
+
+    private string SpeakReason()
+    {
+        var req = new InteractionRequirements { Required = MobCapability.Speak };
+        Assert.That(_sCapabilities.CanPerform(SPlayer, req, null, null, out var reason), Is.False);
+        return reason ?? string.Empty;
     }
 
     private async Task SetMobState(MobState state)
@@ -260,6 +281,77 @@ public sealed class MobConditionTest : InteractionTest
             _sChat.CheckIgnoreSpeechBlocker(SPlayer, false, out var ignoring);
             Assert.That(ignoring, Is.EqualTo(MobCondition.None), "The grant forgave a second message.");
         });
+    }
+
+    [Test, Description("A muted mob is Silenced: it can't speak, but can do everything else.")]
+    public async Task MutedIsSilenced()
+    {
+        await Mute(MutedEffect, true);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Silenced));
+            Assert.That(SCan(MobCapability.Interact), Is.True);
+            Assert.That(SpeakReason(), Is.EqualTo(Loc.GetString("speech-muted")));
+        });
+
+        // The mute comes from the server; give its state time to reach the client.
+        await RunTicks(5);
+        await Client.WaitAssertion(() =>
+            Assert.That(_cCapabilities.HasCondition(CPlayer, MobCondition.Silenced), "The client didn't get Silenced."));
+
+        await Mute(MutedEffect, false);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Silenced), Is.False);
+            Assert.That(SCan(MobCapability.Speak), Is.True);
+        });
+
+        await RunTicks(5);
+        await Client.WaitAssertion(() =>
+            Assert.That(_cCapabilities.HasCondition(CPlayer, MobCondition.Silenced), Is.False, "The client kept Silenced."));
+    }
+
+    [Test, Description("The effect that silences a mob words the reason, like a mime's vow.")]
+    public async Task MimeReasonComesFromEffect()
+    {
+        await Mute(MimeMutedEffect, true);
+        await Server.WaitAssertion(() => Assert.That(SpeakReason(), Is.EqualTo(Loc.GetString("mime-cant-speak"))));
+    }
+
+    [Test, Description("Last words forgive crit and muting; the force-say mask forgives only crit.")]
+    public async Task LastWordsMask()
+    {
+        await Mute(MutedEffect, true);
+        await SetMobState(MobState.Critical);
+
+        await Server.WaitAssertion(() =>
+        {
+            var lastWords = new InteractionRequirements
+            {
+                Required = MobCapability.Speak,
+                Ignoring = MobCondition.Unconscious | MobCondition.Silenced,
+            };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, lastWords), Is.True, "Last words were blocked.");
+
+            var forceSay = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = MobCondition.Unconscious };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, forceSay, null, null, out var reason), Is.False,
+                "A muted mob force-said a line.");
+            Assert.That(reason, Is.EqualTo(Loc.GetString("speech-muted")));
+        });
+    }
+
+    [Test, Description("A delayed mute silences once it starts, not when it's added.")]
+    public async Task DelayedMuteSilencesOnStart()
+    {
+        await Mute(MutedEffect, true, TimeSpan.FromSeconds(1));
+        await Server.WaitAssertion(() =>
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Silenced), Is.False, "Silenced before the mute started."));
+
+        await RunSeconds(1.5f);
+        await Server.WaitAssertion(() =>
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Silenced), "Not silenced after the mute started."));
     }
 
     [Test, Description("Stun blocks acting and moving, but not speaking or pointing.")]

@@ -131,10 +131,11 @@ public sealed partial class StatusEffectsSystem : EntitySystem
             _timing.CurTime < statusEffectEnt.Comp.StartEffectTime)
             return false;
 
+        // Marked first, so handlers see the effect as applied: refreshes that poll status effects run in here.
+        statusEffectEnt.Comp.Applied = true;
+
         var ev = new StatusEffectAppliedEvent(statusEffectEnt.Comp.AppliedTo.Value);
         RaiseLocalEvent(statusEffectEnt, ref ev);
-
-        statusEffectEnt.Comp.Applied = true;
 
         return true;
     }

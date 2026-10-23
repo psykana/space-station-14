@@ -55,3 +55,14 @@ public readonly record struct MobConditionsChangedEvent(EntityUid Uid, MobCondit
     public MobCondition Added => New & ~Old;
     public MobCondition Removed => Old & ~New;
 }
+
+/// <summary>
+/// Raised on a mob when a failure is explained by <see cref="Condition"/>, so whatever declared it can word it, like a
+/// mime's vow instead of a plain mute. Only raised on failure. Leave <see cref="Reason"/> alone if it is already set.
+/// </summary>
+/// <param name="Required">What was being attempted.</param>
+[ByRefEvent]
+public record struct GetMobConditionReasonEvent(MobCondition Condition, MobCapability Required)
+{
+    public LocId? Reason;
+}

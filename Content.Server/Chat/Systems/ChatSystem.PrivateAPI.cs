@@ -19,7 +19,14 @@ public sealed partial class ChatSystem
             return true;
 
         var req = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = ignoring };
-        return _capabilities.CanPerform(source, req, null, null, out _);
+        if (_capabilities.CanPerform(source, req, null, null, out var reason))
+            return true;
+
+        // An unconscious mind gets no feedback, like a dead mime typing.
+        if (reason != null && !_capabilities.IsBlocked(source, MobCapability.Conscious, ignoring))
+            _popup.PopupEntity(reason, source, source);
+
+        return false;
     }
 
     private void SendEntitySpeak(

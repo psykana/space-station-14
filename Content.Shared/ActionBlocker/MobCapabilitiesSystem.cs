@@ -31,6 +31,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
         MobCondition.HandsBlocked,
         MobCondition.Immobilized,
         MobCondition.Floored,
+        MobCondition.Silenced,
     ];
 
     /// <summary>
@@ -111,6 +112,9 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
         if ((conditions & MobCondition.PullBlocked) != 0)
             blocked |= MobCapability.Pull;
 
+        if ((conditions & MobCondition.Silenced) != 0)
+            blocked |= MobCapability.Speak;
+
         return blocked;
     }
 
@@ -134,9 +138,9 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     {
         var result = MobCondition.None;
 
-        for (var bit = 1; bit <= (int) MobCondition.Incorporeal; bit <<= 1)
+        // Only declarable conditions can be in the declared set.
+        foreach (var condition in ReasonPriority)
         {
-            var condition = (MobCondition) bit;
             if ((declared & condition) == 0)
                 continue;
 
@@ -277,7 +281,13 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
             return false;
         }
 
-        reason = Loc.GetString($"mob-condition-blocked-{condition.ToString().ToLowerInvariant()}");
+        // Whatever declared the condition may word it.
+        var ev = new GetMobConditionReasonEvent(condition, required);
+        RaiseLocalEvent(ent, ref ev);
+
+        reason = ev.Reason is { } custom
+            ? Loc.GetString(custom)
+            : Loc.GetString($"mob-condition-blocked-{condition.ToString().ToLowerInvariant()}");
         return true;
     }
 
