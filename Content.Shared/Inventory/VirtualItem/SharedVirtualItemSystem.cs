@@ -77,7 +77,7 @@ public abstract partial class SharedVirtualItemSystem : EntitySystem
     private void OnTargetAttempt(Entity<VirtualItemComponent> ent, ref MobActionTargetAttemptEvent args)
     {
         // No interactions with a virtual item, please.
-        if ((args.Required & (MobCapability.Interact | MobCapability.UiAccess)) != 0)
+        if ((args.Required & MobCapability.Interact) != 0)
             args.Cancelled = true;
     }
 

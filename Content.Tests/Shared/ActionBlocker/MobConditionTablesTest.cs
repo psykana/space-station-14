@@ -13,7 +13,7 @@ public sealed class MobConditionTablesTest
     /// <summary>
     /// Every capability a condition can block. <see cref="MobCapability.Complex"/> is a creature property.
     /// </summary>
-    private const MobCapability AllBlockable = (MobCapability) ((1u << 17) - 1);
+    private const MobCapability AllBlockable = (MobCapability) ((1u << 16) - 1);
 
     private static readonly MobCondition[] AllConditions =
         Enum.GetValues<MobCondition>().Where(c => c != MobCondition.None).ToArray();
@@ -22,9 +22,9 @@ public sealed class MobConditionTablesTest
     public void CascadeFixedPoint()
     {
         var unconscious = MobCapabilitiesSystem.Expand(MobCondition.Unconscious);
-        Assert.That(unconscious.HasFlag(MobCondition.HandsBlocked | MobCondition.UiBlocked | MobCondition.PullBlocked),
+        Assert.That(unconscious.HasFlag(MobCondition.HandsBlocked | MobCondition.PullBlocked),
             "Unconscious must reach the second-level conditions through HandsBlocked/Incapacitated.");
-        Assert.That(MobCapabilitiesSystem.Expand(MobCondition.Restrained).HasFlag(MobCondition.UiBlocked));
+        Assert.That(MobCapabilitiesSystem.Expand(MobCondition.Restrained).HasFlag(MobCondition.PullBlocked));
 
         // Expand is idempotent.
         Assert.That(MobCapabilitiesSystem.Expand(unconscious), Is.EqualTo(unconscious));

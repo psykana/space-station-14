@@ -69,7 +69,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
                 expanded |= MobCondition.HandsBlocked;
 
             if ((expanded & (MobCondition.Incapacitated | MobCondition.HandsBlocked)) != 0)
-                expanded |= MobCondition.UiBlocked | MobCondition.PullBlocked;
+                expanded |= MobCondition.PullBlocked;
 
             if (expanded == conditions)
                 return conditions;
@@ -105,9 +105,6 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
 
         if ((conditions & MobCondition.Floored) != 0)
             blocked |= MobCapability.Stand;
-
-        if ((conditions & MobCondition.UiBlocked) != 0)
-            blocked |= MobCapability.UiAccess;
 
         if ((conditions & MobCondition.PullBlocked) != 0)
             blocked |= MobCapability.Pull;

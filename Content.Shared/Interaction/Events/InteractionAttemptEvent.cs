@@ -26,7 +26,7 @@ namespace Content.Shared.Interaction.Events
     ///     generic interaction.
     /// </summary>
     [ByRefEvent]
-    [Obsolete("Subscribe to MobActionTargetAttemptEvent and check for MobCapability.Interact (and UiAccess). This event will be removed in a future release.")]
+    [Obsolete("Subscribe to MobActionTargetAttemptEvent and check for MobCapability.Interact. This event will be removed in a future release.")]
     public struct GettingInteractedWithAttemptEvent(EntityUid uid, EntityUid? target)
     {
         public bool Cancelled;

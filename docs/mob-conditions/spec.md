@@ -58,10 +58,9 @@ public enum MobCondition : ushort
     HandsBlocked  = 1 << 3,  // cannot use manipulators
     Immobilized   = 1 << 4,  // cannot move voluntarily
     Floored       = 1 << 5,  // cannot be upright
-    UiBlocked     = 1 << 6,  // cannot operate user interfaces
-    PullBlocked   = 1 << 7,  // cannot pull
-    Incorporeal   = 1 << 8,  // no physical presence (spectating ghost)
-    Silenced      = 1 << 9,  // cannot speak: muted, a mime's vow
+    PullBlocked   = 1 << 6,  // cannot pull
+    Incorporeal   = 1 << 7,  // no physical presence (spectating ghost)
+    Silenced      = 1 << 8,  // cannot speak: muted, a mime's vow
 }
 ```
 
@@ -69,15 +68,16 @@ public enum MobCondition : ushort
 - A member MUST NOT be added unless something sets it, either a producer declares it or the
   cascade (§3.1) derives it. In the end state, the vocabulary is exactly the bookkeeper's API
   plus what its producers declare (§15.6).
-- `UiBlocked` and `PullBlocked` are currently derived-only and change no behaviour on their own:
-  - `UiAccess` already runs the full `CanInteract` (§5.2).
+- `PullBlocked` is derived-only and changes no behaviour on its own:
   - `PullingSystem.CanPull` (`Movement/Pulling/Systems/PullingSystem.cs:441–451`) already
     requires an empty hand and `CanInteract`.
-  - They exist for tg parity and so that a call site can forgive them (§4.3).
+  - It exists for tg parity and so that a call site can forgive it (§4.3).
+- `UiBlocked`, and the `UiAccess` capability it blocks, come back with the UI phase (§8). They
+  were removed while nothing consumed them.
 - Stasis and Grabbed are deliberately absent (design §3).
 - *Declarable* members are the ones a producer may `Add`: `Unconscious`, `Incapacitated`,
-  `Restrained`, `HandsBlocked`, `Immobilized`, `Floored`, `Incorporeal`, `Silenced`. `UiBlocked`
-  and `PullBlocked` SHOULD only be derived.
+  `Restrained`, `HandsBlocked`, `Immobilized`, `Floored`, `Incorporeal`, `Silenced`.
+  `PullBlocked` SHOULD only be derived.
 
 ### 2.2 `MobCapability` — `MobCondition.cs`
 
@@ -101,10 +101,9 @@ event the bookkeeper still raises for it.
 | `Stand` | 11 | `StandAttemptEvent` (`Content.Shared.Standing`) |
 | `Pull` | 12 | `StartPullAttemptEvent` (`Content.Shared.Pulling.Events`; the file is under `Movement/Pulling/Events/`) |
 | `ChangeDirection` | 13 | `ChangeDirectionAttemptEvent` (`Content.Shared.Interaction.Events`) |
-| `UiAccess` | 14 | none. Its consumer, `GetUiStatus` (§8), is deferred to a later phase; until then only the virtual-item and subfloor vetoes test it. |
-| `StandUp` | 15 | `StandUpAttemptEvent` (`Content.Shared.Stunnable`, by-ref) |
-| `Down` | 16 | `DownAttemptEvent` (`Content.Shared.Standing`). Not blocked by `Unconscious`: crit and death lie the mob down. |
-| `Complex` | 17 | none. A creature property (§15.4): the mob has `ComplexInteractionComponent`. No condition blocks it. |
+| `StandUp` | 14 | `StandUpAttemptEvent` (`Content.Shared.Stunnable`, by-ref) |
+| `Down` | 15 | `DownAttemptEvent` (`Content.Shared.Standing`). Not blocked by `Unconscious`: crit and death lie the mob down. |
+| `Complex` | 16 | none. A creature property (§15.4): the mob has `ComplexInteractionComponent`. No condition blocks it. |
 
 `enum MobCapability : uint`, `[Flags, Serializable, NetSerializable]`, `None = 0`.
 
@@ -252,7 +251,7 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
 |---|---|
 | `Unconscious` | `Incapacitated \| Immobilized \| Floored \| HandsBlocked` |
 | `Restrained` | `HandsBlocked` |
-| `Incapacitated` or `HandsBlocked` | `UiBlocked \| PullBlocked` |
+| `Incapacitated` or `HandsBlocked` | `PullBlocked` |
 
 ### 3.2 Policy — `MobCapabilitiesSystem.GetBlocked(MobCondition) → MobCapability`
 
@@ -264,7 +263,6 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
 | `Incorporeal` | `Interact \| UseHeld \| Pickup \| Drop \| Emote` |
 | `Immobilized` | `Move` |
 | `Floored` | `Stand` |
-| `UiBlocked` | `UiAccess` |
 | `PullBlocked` | `Pull` |
 | `Silenced` | `Speak` |
 | `Restrained` | nothing directly |
@@ -288,8 +286,8 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
   - Asleep maps to `Unconscious`. Sleeping's own five cancels, combined with the Stunned and
     KnockedDown components it ensures (`SleepingSystem.cs:123–124`), are the same set.
   - Cuffs map to `Restrained`. Today they cancel Drop, Pickup, Attack, Use and Interaction
-    (`SharedCuffableSystem.cs:83–87`). The cascade adds `Pull` and `UiAccess`, which `CanPull` and
-    the BUI gate already deny through `CanInteract` (§2.1).
+    (`SharedCuffableSystem.cs:83–87`). The cascade adds `Pull`, which `CanPull` already denies through
+    `CanInteract` (§2.1).
   - Ghost maps to `Incorporeal`. Today it cancels Use, Emote, Drop, Pickup and Interaction
     (`SharedGhostSystem.cs:32–36`); the mapping blocks the same set.
 - **Delta, deliberate:** `Unconscious` blocks `StandUp` for crit and dead mobs. MobState doesn't
@@ -470,7 +468,7 @@ public bool CanInteract(EntityUid user, EntityUid? target, in InteractionRequire
 
    | In `req.Required` | Legacy check |
    |---|---|
-   | `Interact`, `UiAccess` | the existing `CanInteract(user, target)` body: `ConsciousAttemptEvent`, then `InteractionAttemptEvent(user, target, req.Ignoring)`, then `GettingInteractedWithAttemptEvent` on the target |
+   | `Interact` | the existing `CanInteract(user, target)` body: `ConsciousAttemptEvent`, then `InteractionAttemptEvent(user, target, req.Ignoring)`, then `GettingInteractedWithAttemptEvent` on the target |
    | `Conscious` | `ConsciousAttemptEvent` |
    | `None` | nothing |
    | any other | MUST NOT be used with this overload; use the specific `CanX` |
@@ -588,9 +586,9 @@ delta as a stated gameplay change, or keep a residual event and pick a narrower 
 
 | Source | File | Events cancelled today | Proposed condition | Delta |
 |---|---|---|---|---|
-| AdminFrozen | `Administration/AdminFrozenSystem.cs:23–34` | Use, Pickup, Throw, Interaction, Attack, ChangeDirection, UpdateCanMove; Speak/Emote if `Muted` | `Incapacitated \| Immobilized`; Speak/Emote stay events (Muted is an admin option, not a faculty) | +`Drop` (+`Pull`, `UiAccess` via cascade, already denied by `CanInteract`) |
+| AdminFrozen | `Administration/AdminFrozenSystem.cs:23–34` | Use, Pickup, Throw, Interaction, Attack, ChangeDirection, UpdateCanMove; Speak/Emote if `Muted` | `Incapacitated \| Immobilized`; Speak/Emote stay events (Muted is an admin option, not a faculty) | +`Drop` (+`Pull` via cascade, already denied by `CanInteract`) |
 | VentriloquistPuppet | `Puppet/SharedVentriloquistPuppetSystem.cs:18–24` | Use, Interaction, Drop, Pickup, UpdateCanMove, Emote, ChangeDirection | `Incapacitated \| Immobilized`, with Emote kept as an event | +`Attack`, +`Throw` |
-| KitchenSpike | `Kitchen/SharedKitchenSpikeSystem.cs:75–80` | ChangeDirection, Use, Throw, Drop, Attack, Pickup (**not** Interaction) | `Incapacitated` | +`Interact`, +`UiAccess`, +`Pull` |
+| KitchenSpike | `Kitchen/SharedKitchenSpikeSystem.cs:75–80` | ChangeDirection, Use, Throw, Drop, Attack, Pickup (**not** Interaction) | `Incapacitated` | +`Interact`, +`Pull` |
 | BeingDisposed | `Disposal/Unit/SharedBeingDisposedSystem.cs:27–28` | Interaction, Attack | `HandsBlocked` | +`UseHeld`, +`Pickup`, +`Drop` |
 | Brain / BorgBrain | `Body/Systems/BrainSystem.cs:20`, `Silicons/Borgs/SharedBorgSystem.cs:101` | Point | leave as events (creature property: no body to point with; `BrainComponent` is not networked, §6.1.6) | — |
 | Worm | `Movement/Systems/WormSystem.cs:19` | StandUp (+ message, autostand) | leave (sets extra fields) | — |
@@ -692,7 +690,9 @@ On `ComponentInit`, if either was set to `false` in YAML, translate it into `Req
 
 ## 8. UI tiers
 
-> **Deferred to a later phase.** The UI tiers are a refactor of their own. A first
+> **Deferred to a later phase.** It adds back the `UiAccess` capability and the
+> `UiBlocked` condition, which `Incapacitated` and `HandsBlocked` imply and which blocks
+> `UiAccess`. The UI tiers are a refactor of their own. A first
 > implementation landed on `mob-conditions` (`8b64a50b6b`) and was reverted to keep this phase
 > to the bookkeeper. UIs behave as on master until then. This section is the design for that
 > phase.
@@ -726,7 +726,7 @@ The resolution order (first match wins):
 2. **`comp?.AdminOnly == true` and the user is not an admin**: `Close`.
 3. **`comp?.RequiresComplex == true` and `!CanComplexInteract(user)`**: `Close`. This is a
    creature property, not a condition.
-4. **`req = { Action = UiAccess }`.** If `CanInteract(user, target, req)` passes, the result is
+4. **`req = { Required = UiAccess }`.** If `CanInteract(user, target, req)` passes, the result is
    `Interactive`.
 5. **If `comp?.ReadOnlyConditions` is not `None`**, set `req.Ignoring` to it. If
    `CanInteract(user, target, req)` passes, the result is `ReadOnly`.
@@ -1081,7 +1081,7 @@ Two kinds of test:
 
 | Test | Asserts |
 |---|---|
-| `CascadeFixedPoint` | `Expand(Unconscious)` contains `HandsBlocked \| UiBlocked \| PullBlocked`; `Expand(Restrained)` contains `UiBlocked`. |
+| `CascadeFixedPoint` | `Expand(Unconscious)` contains `HandsBlocked \| PullBlocked`; `Expand(Restrained)` contains `PullBlocked`. |
 | `IgnoringDerivedBit` | `Effective(Restrained, HandsBlocked)` does not block `Interact`; `Effective(Unconscious \| Restrained, HandsBlocked)` still blocks it (§4.3). |
 | `BlockingConditionsMultiCause` | `GetBlockingConditions` for `Restrained \| Unconscious` and `Interact` returns both bits (§10.2). |
 | `NoConditionBlocksComplex` | Every declarable condition together, expanded, still doesn't block `Complex` (§3.2). |
@@ -1368,7 +1368,7 @@ Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migra
 
 | System | Event today | Rule |
 |---|---|---|
-| `SharedVirtualItemSystem` (`Inventory/VirtualItem/SharedVirtualItemSystem.cs:44`) | GettingInteractedWith | **Done.** A virtual item can't be interacted with (`Interact`, `UiAccess`). |
+| `SharedVirtualItemSystem` (`Inventory/VirtualItem/SharedVirtualItemSystem.cs:44`) | GettingInteractedWith | **Done.** A virtual item can't be interacted with (`Interact`). |
 | `SharedSubFloorHideSystem` (`SubFloor/SharedSubFloorHideSystem.cs:40–41`) | GettingInteractedWith, GettingAttacked | **Done.** Can't touch or attack things hidden under the floor. Users with `BypassInteractionChecksComponent` are exempt from the touching part. |
 | `MultiHandedItemSystem` (`Item/MultiHandedItemSystem.cs:19`) | GettingPickedUp | **Done.** Needs enough free hands. Its popup became `Reason`, which `CanPickup(…, showPopup: true)` shows. |
 | `SharedMechSystem.Relay` (`Mech/EntitySystems/SharedMechSystem.Relay.cs:9`) | GettingAttacked | **Done.** Relays the `Attack` veto to the pilot as `MechPilotRelayedEvent<MobActionTargetAttemptEvent>`, and the guardian's relayed handler moved with it. It also keeps relaying the obsolete `GettingAttackedAttemptEvent`, so downstream subscribers of `MechPilotRelayedEvent<GettingAttackedAttemptEvent>` keep working until the removal release. |
@@ -1471,7 +1471,8 @@ A design review of the demo. Changed:
 - **`StatusEffectsSystem` marks an effect applied before announcing it**, so refreshes in the
   applied event see it.
 - **The UI tiers were reverted**, to a later phase of their own (§8). The bookkeeper changes
-  don't depend on them. The activate-key failure popup stays: it is interaction feedback, not a
+  don't depend on them. `UiAccess` and `UiBlocked` went with them, since nothing else
+  consumed them. The activate-key failure popup stays: it is interaction feedback, not a
   tier.
 - **Sleeping became a producer.** The review found that Last Words, once a mask, failed for a
   mob asleep and in crit: crit doesn't wake a sleeper, and Sleeping still cancelled speech

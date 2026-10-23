@@ -245,8 +245,8 @@ public sealed partial class MobCapabilitiesSystem
 #pragma warning disable CS0618
     private bool RaiseLegacyAttempts(EntityUid user, MobCapability required, EntityUid? target, EntityUid? used, LegacyArgs legacy)
     {
-        // Interact and UiAccess share their legacy events, and both include the consciousness check.
-        if ((required & (MobCapability.Interact | MobCapability.UiAccess)) != 0)
+        // The interaction check includes the consciousness check.
+        if ((required & MobCapability.Interact) != 0)
         {
             if (!RaiseConsciousAttempt(user))
                 return false;

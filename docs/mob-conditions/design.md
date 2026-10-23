@@ -100,11 +100,11 @@ The model has three tiers, two closed enums, one component and one system, all i
 ```csharp
 [Flags] public enum MobCondition : ushort   // the trait layer
 { Unconscious, Incapacitated, Restrained, HandsBlocked, Immobilized,
-  Floored, UiBlocked, PullBlocked, Incorporeal }
+  Floored, PullBlocked, Incorporeal, Silenced }
 
 [Flags] public enum MobCapability : uint        // the mobility_flags layer
 { Interact, Conscious, UseHeld, Pickup, Drop, Attack, Throw, Speak, Emote,
-  Point, Move, Stand, StandUp, Pull, ChangeDirection, UiAccess }
+  Point, Move, Stand, StandUp, Down, Pull, ChangeDirection, Complex }
 ```
 
 **Cascades** (`MobCapabilitiesSystem.Expand`, applied to a fixed point):
@@ -113,7 +113,7 @@ The model has three tiers, two closed enums, one component and one system, all i
 |---|---|
 | `Unconscious` | `Incapacitated \| Immobilized \| Floored \| HandsBlocked` |
 | `Restrained` | `HandsBlocked` |
-| `Incapacitated`, `HandsBlocked` | `UiBlocked \| PullBlocked` |
+| `Incapacitated`, `HandsBlocked` | `PullBlocked` |
 
 **Policy** (`MobCapabilitiesSystem.GetBlocked`) is the single place where any condition blocks
 anything:
@@ -126,7 +126,6 @@ anything:
 | `Incorporeal` | `Interact, UseHeld, Pickup, Drop, Emote` |
 | `Immobilized` | `Move` |
 | `Floored` | `Stand` |
-| `UiBlocked` | `UiAccess` |
 | `PullBlocked` | `Pull` |
 
 `Stand` and `StandUp` are deliberately separate actions:
@@ -201,9 +200,10 @@ The price of a cache is that every producer must refresh it at the right moment.
 blockers are evaluated live, so a stale value can't happen. Spec §6.1 makes "refresh before
 anything else runs" a rule, and spec §4.5 asserts it in every integration test.
 
-`UiBlocked` and `PullBlocked` only come from the cascade. Today they block nothing that
-`Interact` doesn't already block: `CanPull` and the BUI gate both call `CanInteract`. They are
-kept for tg parity, and so that a call site can forgive them on their own.
+`PullBlocked` only comes from the cascade. Today it blocks nothing that `Interact` doesn't
+already block, because `CanPull` calls `CanInteract`. It is kept for tg parity, and so that a
+call site can forgive it on its own. The UI phase (§5) adds `UiBlocked` and `UiAccess` the same
+way.
 
 ## 4. What producers look like
 

@@ -44,24 +44,19 @@ public enum MobCondition : ushort
     Floored = 1 << 5,
 
     /// <summary>
-    /// Cannot operate user interfaces. Only derived by the cascade.
-    /// </summary>
-    UiBlocked = 1 << 6,
-
-    /// <summary>
     /// Cannot pull. Only derived by the cascade.
     /// </summary>
-    PullBlocked = 1 << 7,
+    PullBlocked = 1 << 6,
 
     /// <summary>
     /// No physical presence, like a spectating ghost.
     /// </summary>
-    Incorporeal = 1 << 8,
+    Incorporeal = 1 << 7,
 
     /// <summary>
     /// Cannot speak: muted, a mime's vow, a puppet nobody holds.
     /// </summary>
-    Silenced = 1 << 9,
+    Silenced = 1 << 8,
 }
 
 /// <summary>
@@ -116,22 +111,19 @@ public enum MobCapability : uint
     /// <summary><see cref="Content.Shared.Interaction.Events.ChangeDirectionAttemptEvent"/></summary>
     ChangeDirection = 1 << 13,
 
-    /// <summary>No attempt event; consumed by the UI access tiers.</summary>
-    UiAccess = 1 << 14,
-
     /// <summary><see cref="Content.Shared.Stunnable.StandUpAttemptEvent"/>: may it try to rise.</summary>
-    StandUp = 1 << 15,
+    StandUp = 1 << 14,
 
     /// <summary>
     /// <see cref="Content.Shared.Standing.DownAttemptEvent"/>: may it lie down. Nothing unconscious blocks this;
     /// crit and death lie the mob down.
     /// </summary>
-    Down = 1 << 16,
+    Down = 1 << 15,
 
     /// <summary>
     /// Has the hands and wits for complex interactions, through
     /// <see cref="Content.Shared.Interaction.Components.ComplexInteractionComponent"/>. A creature property: no condition
     /// blocks it, and there is no attempt event.
     /// </summary>
-    Complex = 1 << 17,
+    Complex = 1 << 16,
 }
