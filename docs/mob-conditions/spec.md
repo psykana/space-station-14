@@ -61,6 +61,7 @@ public enum MobCondition : ushort
     UiBlocked     = 1 << 6,  // cannot operate user interfaces
     PullBlocked   = 1 << 7,  // cannot pull
     Incorporeal   = 1 << 8,  // no physical presence (spectating ghost)
+    Silenced      = 1 << 9,  // cannot speak: muted, a mime's vow
 }
 ```
 
@@ -75,12 +76,14 @@ public enum MobCondition : ushort
   - They exist for tg parity and so that a call site can forgive them (§4.3).
 - Stasis and Grabbed are deliberately absent (design §3).
 - *Declarable* members are the ones a producer may `Add`: `Unconscious`, `Incapacitated`,
-  `Restrained`, `HandsBlocked`, `Immobilized`, `Floored`, `Incorporeal`. `UiBlocked` and
-  `PullBlocked` SHOULD only be derived.
+  `Restrained`, `HandsBlocked`, `Immobilized`, `Floored`, `Incorporeal`, `Silenced`. `UiBlocked`
+  and `PullBlocked` SHOULD only be derived.
 
-### 2.2 `MobAction` — `MobCondition.cs`
+### 2.2 `MobCapability` — `MobCondition.cs`
 
-Each member names the attempt event that `MobCapabilitiesSystem` cancels for it.
+Things a mob can do. A requirement is a mask of them (§2.5): a caller asks for every capability
+its act needs, and the act is blocked if any of them is. Each member names the legacy attempt
+event the bookkeeper still raises for it.
 
 | Member | Bit | Attempt event (namespace) |
 |---|---|---|
@@ -101,8 +104,9 @@ Each member names the attempt event that `MobCapabilitiesSystem` cancels for it.
 | `UiAccess` | 14 | none; consumed by `GetUiStatus` (§8) |
 | `StandUp` | 15 | `StandUpAttemptEvent` (`Content.Shared.Stunnable`, by-ref) |
 | `Down` | 16 | `DownAttemptEvent` (`Content.Shared.Standing`). Not blocked by `Unconscious`: crit and death lie the mob down. |
+| `Complex` | 17 | none. A creature property (§15.4): the mob has `ComplexInteractionComponent`. No condition blocks it. |
 
-`enum MobAction : uint`, `[Flags, Serializable, NetSerializable]`, `None = 0`.
+`enum MobCapability : uint`, `[Flags, Serializable, NetSerializable]`, `None = 0`.
 
 ### 2.3 `MobConditionsComponent` — `MobConditionsComponent.cs`
 
@@ -113,7 +117,7 @@ public sealed partial class MobConditionsComponent : Component
 {
     [ViewVariables, AutoNetworkedField] public MobCondition Declared; // union of producer Adds, pre-cascade
     [ViewVariables] public MobCondition Conditions;                   // Expand(Declared)
-    [ViewVariables] public MobAction Blocked;                         // GetBlocked(Conditions)
+    [ViewVariables] public MobCapability Blocked;                     // GetBlocked(Conditions)
 }
 ```
 
@@ -155,17 +159,33 @@ while `ApplyingState` and dirties only on change.
 `RefreshMobConditionsEvent` is raised only by `Refresh` (§4.2) and, in DEBUG, by the
 consistency check (§4.5). Nothing on a hot path raises it.
 
+```csharp
+/// Raised on the mob when a failure is explained by Condition, so whatever declared it can word it.
+[ByRefEvent]
+public record struct GetMobConditionReasonEvent(MobCondition Condition, MobCapability Required)
+{
+    public LocId? Reason;
+}
+```
+
+`TryGetBlockedReason` raises it after picking the condition (§10.2), and status effects relay it.
+A handler leaves `Reason` alone if it is already set. It is only raised on failure. The muted
+status effect uses it to show a mime's vow instead of a plain mute.
+
 ### 2.5 `InteractionRequirements` — `InteractionRequirements.cs`
 
 ```csharp
 [DataDefinition, Serializable, NetSerializable]
 public partial record struct InteractionRequirements()
 {
-    [DataField] public MobAction Action = MobAction.Interact;     // what is being attempted
-    [DataField] public MobCondition Ignoring = MobCondition.None; // conditions tolerated
-    [DataField] public bool NeedComplex = false;                  // requires ComplexInteractionComponent
+    [DataField] public MobCapability Required = MobCapability.Interact; // every capability the act needs
+    [DataField] public MobCondition Ignoring = MobCondition.None;       // conditions tolerated
 }
 ```
+
+`Required` is a mask. The act is blocked if any capability in it is blocked, by a condition or
+by a creature property such as `Complex` (§15.4). It replaced a single `Action` and a
+`NeedComplex` bool.
 
 It is named to avoid confusion with `ActionRequirementsComponent`/`ActionRequirementsSystem`
 (`Content.Shared.Actions`, #46029), which is a different feature (design §6). The prototype
@@ -229,7 +249,7 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
 | `Restrained` | `HandsBlocked` |
 | `Incapacitated` or `HandsBlocked` | `UiBlocked \| PullBlocked` |
 
-### 3.2 Policy — `MobCapabilitiesSystem.GetBlocked(MobCondition) → MobAction`
+### 3.2 Policy — `MobCapabilitiesSystem.GetBlocked(MobCondition) → MobCapability`
 
 | Condition | Blocks |
 |---|---|
@@ -241,6 +261,7 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
 | `Floored` | `Stand` |
 | `UiBlocked` | `UiAccess` |
 | `PullBlocked` | `Pull` |
+| `Silenced` | `Speak` |
 | `Restrained` | nothing directly |
 
 **Invariants these tables MUST preserve** (each one has a test in §13):
@@ -249,6 +270,9 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
   pin knocked-down mobs forever.
 - `Point` is not blocked by `Incapacitated`. A stunned but awake mob can gesture, which is
   today's behaviour.
+- No condition blocks `Complex`. It is a creature property (§15.4).
+- `Silenced` doesn't block `Emote`. Mimes emote; muting only muffles vocal emotes, which is
+  not a gate (§16.5).
 - For the slice-1 producers, today's semantics are preserved, with the one delta below. Each
   mapping was checked against the producer's current event set:
   - Stun maps to `Incapacitated | Immobilized`. Today it cancels ChangeDirection, Move,
@@ -280,12 +304,12 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
 ```csharp
 public void Refresh(Entity<MobConditionsComponent?> ent);
 public bool HasCondition(Entity<MobConditionsComponent?> ent, MobCondition condition);          // any bit of Conditions
-public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobAction action);                   // hot path
-public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobAction action, MobCondition ignoring);
-public MobCondition GetBlockingConditions(Entity<MobConditionsComponent?> ent, MobAction action); // for popups (§10.2)
+public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobCapability action);                   // hot path
+public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobCapability action, MobCondition ignoring);
+public MobCondition GetBlockingConditions(Entity<MobConditionsComponent?> ent, MobCapability action); // for popups (§10.2)
 
 public static MobCondition Expand(MobCondition conditions);                                     // §3.1
-public static MobAction GetBlocked(MobCondition conditions);                                    // §3.2
+public static MobCapability GetBlocked(MobCondition conditions);                                    // §3.2
 public static MobCondition Effective(MobCondition declared, MobCondition ignoring);              // §4.3
 ```
 
@@ -434,12 +458,12 @@ public bool CanInteract(EntityUid user, EntityUid? target, in InteractionRequire
 ```
 
 **Steps:**
-1. If `IsBlocked(user, req.Action, req.Ignoring)`, return false. This is the fast path when
+1. If `IsBlocked(user, req.Required, req.Ignoring)`, return false. This is the fast path when
    `Ignoring == None`.
-2. If `req.NeedComplex && !CanComplexInteract(user)`, return false.
-3. Raise the **legacy event for the action**, so that unmigrated sources still get a say:
+2. If `req.Required` includes a capability the creature lacks (§15.4), return false.
+3. Raise the **legacy event for each required capability**, so that unmigrated sources still get a say:
 
-   | `req.Action` | Legacy check |
+   | In `req.Required` | Legacy check |
    |---|---|
    | `Interact`, `UiAccess` | the existing `CanInteract(user, target)` body: `ConsciousAttemptEvent`, then `InteractionAttemptEvent(user, target, req.Ignoring)`, then `GettingInteractedWithAttemptEvent` on the target |
    | `Conscious` | `ConsciousAttemptEvent` |
@@ -462,30 +486,42 @@ migration: an unmigrated cause has not been classified yet.
   `KnockdownStatusEffect` relay handler (`SharedStunSystem.cs:69/371`) are untouched in slice 1
   (see §11 Q2).
 
-### 5.4 Speak, last words and ordering
+### 5.4 Speak: force-say, last words, muting and popups
 
-> **Migration only, for the ordering.** Once the muted status effect declares `Silenced`
-> (§16.1), the relay and its ordering go away. The last-words rule stays.
+Three things used to special-case speech. Each is now an ordinary condition or ignore mask.
 
-`OnSpeakAttempt`:
-1. If `Speak` is not blocked, return.
-2. If the mob has `AllowNextCritSpeechComponent` (`Content.Shared.Damage.ForceSay`):
-   `RemCompDeferred` it and return. This grants one free line.
-3. Otherwise, cancel.
+**Muting is `Silenced`.** The muted status effect declares `Silenced` while it is applied
+(§6.5), and `Silenced` blocks `Speak` (§3.2). Its speak-attempt handler is gone: it cancelled
+and popped up from inside a query, so every speech check showed the popup.
 
-This replaces the two identical copies at `MobStateSystem.Subscribers.cs:166` and
-`SleepingSystem.cs:166`. `AllowNextCritSpeechComponent` stays as it is: it is a stateful
-grant with a timeout, not something an ignore mask can express.
+**Force-say forgives `Unconscious` for one message.** When a mob goes from alive to crit or dead,
+`DamageForceSaySystem` asks the client to send whatever was typed, and grants
+`AllowNextCritSpeechComponent` for three times the ping. The line arrives as an ordinary chat
+message, so the server can't tell it apart.
+- Chat raises `CheckIgnoreSpeechBlockerEvent` once per message, as it is sent. The event now
+  carries an `Ignoring` mask next to its `IgnoreBlocker` bool.
+- `DamageForceSaySystem` answers on `AllowNextCritSpeechComponent` with `Unconscious`, and spends
+  the grant there. A query never spends it, and the bookkeeper knows nothing about it.
+- Until Sleeping becomes a producer, its own `SpeakAttemptEvent` handler keeps its copy of the
+  token check, for the force-say on falling asleep.
 
-**Ordering, required:**
-- `StatusEffectSystem.Relay.cs:60` currently subscribes the status-effect Speak relay with
-  `after: [typeof(MobStateSystem)]` (#45977). That ensures `MutedStatusEffectSystem` sees the
-  event already cancelled for a dead mob and doesn't popup-spam.
-- The slice that moves Speak blocking MUST change this to
-  `after: [typeof(MobStateSystem), typeof(MobCapabilitiesSystem)]`.
-- Once MobState no longer subscribes to Speak, it MUST be just
-  `after: [typeof(MobCapabilitiesSystem)]`.
-- A test MUST cover "dead mime types in chat: no muted popup" (§13).
+This was misnamed "last words" before. It is not the Last Words action.
+
+**Last words pass a mask.** `CritMobActionsSystem` sends the line with
+`ignoring: Unconscious | Silenced`, through `TrySendInGameICMessage`, which now takes a mask.
+- It forgives being crit and, deliberately, being muted.
+- Everything else still applies: a speechless creature, an admin mute (§16.3), and unmigrated
+  attempt events.
+- It used to skip every check with `ignoreActionBlocker: true`.
+
+**Popups are shown by chat, at send time.** When a message is blocked, chat pops the reason from
+`CanPerform(..., out reason)` (§10.2), unless the mob is still unconscious after the mask. An
+unconscious mind gets no feedback.
+- A crit or dead mime who types gets nothing. That is what #45977's relay ordering achieved; the
+  ordering is gone.
+- A dying mime whose typed line is force-said gets the vow text: `Unconscious` is forgiven,
+  `Silenced` is not, and the effect words the reason (§2.4).
+- Other speech checks, like the typing indicator, magic and the laws UI, pop nothing up.
 
 ## 6. Producers
 
@@ -563,6 +599,24 @@ the PR description as gameplay changes (§11 Q7).
 Nothing is permanently out of scope. Every remaining attempt-event subscriber is classified
 in §16, and each one leaves its event when its bucket's mechanism (§15.2–15.4) lands.
 
+### 6.5 Status-effect producers
+
+A status effect lives on its own entity, so it declares through the relayed event (Q1):
+- Subscribe `StatusEffectRelayedEvent<RefreshMobConditionsEvent>` on the effect's component, and
+  add the condition while the effect's `StatusEffectComponent.Applied` is set. A delayed effect
+  declares once it starts.
+- `Args` is a property of the relay wrapper. Add to a copy and assign it back, or the add is
+  lost.
+- Refresh `args.Target` on `StatusEffectAppliedEvent` and `StatusEffectRemovedEvent`. The removed
+  event is raised after the effect has left the mob's container, so that refresh no longer sees
+  it.
+- `StatusEffectsSystem` sets `Applied` before it raises `StatusEffectAppliedEvent`, so the refresh
+  in that event sees the effect as applied.
+- `Applied` isn't networked: the client computes it from the networked start time. The rule in
+  §6.1.6 holds.
+
+The muted status effect (`Speech/Muting/MutedStatusEffectSystem.cs`) is the first.
+
 ## 7. Action bar
 
 ### 7.1 `ActionComponent.Requires`
@@ -572,7 +626,7 @@ in §16, and each one leaves its event when its bucket's mechanism (§15.2–15.
 ```csharp
 /// What the performer must be capable of. Replaces CheckCanInteract/CheckConsciousness.
 [DataField, AutoNetworkedField]
-public InteractionRequirements Requires = new() { Action = MobAction.Interact };
+public InteractionRequirements Requires = new() { Action = MobCapability.Interact };
 ```
 
 The call sites switch to the §5.2 overload:
@@ -889,14 +943,14 @@ public sealed partial class HasMobConditionCondition : EntityConditionBase<HasMo
 
 ### 10.2 Failure reasons (follow-up)
 
-`GetBlockingConditions(ent, action)` returns every *declared* condition that would block the
-action on its own:
+`GetBlockingConditions(ent, required)` returns every *declared* condition that would block one
+of the required capabilities on its own:
 
 ```csharp
-foreach declared bit b:  if ((GetBlocked(Expand(b)) & action) != 0) result |= b;
+foreach declared bit b:  if ((GetBlocked(Expand(b)) & required) != 0) result |= b;
 ```
 
-That is at most 9 iterations of pure bit math.
+It iterates only the declarable conditions: pure bit math.
 
 It is not "the conditions whose removal would unblock the action". When there are several
 causes, removing any single one unblocks nothing: a cuffed sleeper stays blocked when either
@@ -904,7 +958,9 @@ cause is removed. That definition would return an empty set exactly when an expl
 needed.
 
 For a popup, pick one bit by fixed priority: `Unconscious`, `Incorporeal`, `Incapacitated`,
-`Restrained`, `HandsBlocked`, `Immobilized`, `Floored`.
+`Restrained`, `HandsBlocked`, `Immobilized`, `Floored`, `Silenced`. Then raise
+`GetMobConditionReasonEvent` (§2.4), so whatever declared the bit can word it. Otherwise use
+the key `mob-condition-blocked-<member>`.
 
 `SharedActionsSystem` MAY put a localized "You can't do that while {condition}" into
 `ActionAttemptEvent.Reason`. That addresses the TODO on `ActionRequirementsComponent.FailPopup`
@@ -914,7 +970,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | Should `RefreshMobConditionsEvent` be relayed through status effects, so a status effect entity can declare a condition directly? | **Yes**, in a later slice. The precedent is five existing `Refresh*Event` relays in `StatusEffectNew/StatusEffectSystem.Relay.cs:41–72` (`RefRelayStatusEffectEvent`). It needs refresh calls on status-effect apply and remove. |
+| Q1 | Should `RefreshMobConditionsEvent` be relayed through status effects, so a status effect entity can declare a condition directly? | **Yes. Done** for muting (§6.5). `RefreshMobConditionsEvent` and `GetMobConditionReasonEvent` are relayed with `RefRelayStatusEffectEvent`, and the effect refreshes on apply and remove. The knockdown status effect's `Pinned` (Q2) will use the same relay. |
 | Q2 | How does the `KnockdownStatusEffect` `StandUp` pin (`SharedStunSystem.cs:69/371`) map to conditions? | **A new declarable `Pinned`, which blocks `StandUp` (§15.6).** `Floored` must keep allowing `StandUp`, or recovery breaks (§5.3). The status effect declares `Pinned` through the Q1 relay, and Worm declares it too (§16.1). |
 | Q3 | Should `CheckIncapacitatedCuffEvent` (`SharedCuffableSystem.cs:525/902`) be replaced with `HasCondition(target, Unconscious)`? | The Sleeping and MobState answers map to `Unconscious`. The Stamina-crit answer (`SharedStaminaSystem.cs:147`) has no condition: stamcrit applies stun, but #45296 deliberately excluded plain stun. Either add stamcrit as an explicit source or leave the event. Ask maintainers. |
 | Q4 | Can cuffed mobs struggle out of containers (§9.3)? | Balance call. Raise it with maintainers. |
@@ -936,8 +992,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
    - the `ActionBlockerSystem` overload and the `InteractionAttemptEvent.Ignoring` field;
    - the StationAi cancel-only fix (§5.1);
    - the component on `MobDamageable`;
-   - **MobState as the first producer**, together with the Speak and relay-ordering change
-     from §5.4;
+   - **MobState as the first producer**, together with the Speak change from §5.4;
    - unit tests for the tables and integration tests.
 
    Landing the core with no producer would ship an API that nothing uses. MobState exercises the
@@ -993,6 +1048,10 @@ A demo implements a vertical slice of the model, one commit per step.
     yet.
   - The `InteractionAttemptEvent.Ignoring` field and `CanShiver`/`CanSweat` are gone.
   - `MobConditionsChangedEvent` is also raised broadcast.
+- requirements as capability masks, with `Complex` as the first creature-property bit
+  (§2.5, §15.4);
+- muting as `Silenced`, through the status-effect relay (§6.5); force-say and last words as
+  ignore masks; speech popups from chat (§5.4).
 
 **Deliberately not implemented yet:**
 - **Spectators** keep today's access. `GetUiStatus` closes `RequiresComplex` UIs to ghosts until the §8.5 audit is done.
@@ -1017,6 +1076,7 @@ Two kinds of test:
 | `CascadeFixedPoint` | `Expand(Unconscious)` contains `HandsBlocked \| UiBlocked \| PullBlocked`; `Expand(Restrained)` contains `UiBlocked`. |
 | `IgnoringDerivedBit` | `Effective(Restrained, HandsBlocked)` does not block `Interact`; `Effective(Unconscious \| Restrained, HandsBlocked)` still blocks it (§4.3). |
 | `BlockingConditionsMultiCause` | `GetBlockingConditions` for `Restrained \| Unconscious` and `Interact` returns both bits (§10.2). |
+| `NoConditionBlocksComplex` | Every declarable condition together, expanded, still doesn't block `Complex` (§3.2). |
 
 **Integration tests:**
 
@@ -1027,8 +1087,15 @@ Two kinds of test:
 | `WakeStandsUp` | Sleep, then wake. The mob stands up on the wake tick, which proves `Refresh` ran before `TryStanding` (§6.2). |
 | `FlooredStillAllowsStandingUp` | Knocked down: `Stand` blocked, `StandUp` not blocked, and the mob recovers after the knockdown time. |
 | `ReviveAfterCritKnockdownStandsUp` | Knock down, crit, revive: the mob recovers and stands (§3.2 delta). |
-| `UnconsciousBlocksEverything` | Crit: all 16 §2.2 actions are blocked (through the cascade); `AllowNextCritSpeech` grants exactly one line. |
-| `DeadMimeNoPopup` | Dead mob with `StatusEffectMimeMuted`: a speak attempt is cancelled and no muted popup is raised (§5.4). |
+| `UnconsciousBlocksEverything` | Crit: every §2.2 capability but `Down` and `Complex` is blocked (through the cascade). A query neither honours nor spends the force-say grant. |
+| `ForceSayForgivesUnconsciousOnce` | Crit with the grant: chat's hook returns `Unconscious` and Speak passes with it; a tick later the grant is spent and the hook returns nothing. A hook call that skips every check doesn't spend it (§5.4). |
+| `RequirementIsASet` | Cuffed: `Speak` passes, `Speak \| Interact` fails (§2.5). |
+| `ComplexIsACreatureProperty` | Without `ComplexInteractionComponent`, `Interact \| Complex` fails and `Interact` passes; `IsBlocked(Complex)` is false (§15.4). |
+| `MutedIsSilenced` | Muted: `Silenced` on server and client, Speak blocked with the `speech-muted` reason, Interact allowed; unmuted clears it on both (§6.5). |
+| `MimeReasonComesFromEffect` | With `StatusEffectMimeMuted`, the Speak reason is the vow text (§2.4). |
+| `LastWordsMask` | Crit and muted: `Ignoring = Unconscious \| Silenced` passes; force-say's `Unconscious` alone fails with the mute reason (§5.4). |
+| `DelayedMuteSilencesOnStart` | A delayed mute isn't `Silenced` until it starts (§6.5). |
+| `DeadMimeNoPopup` | Dead mob with `StatusEffectMimeMuted`: a chat message is dropped and no popup is raised (§5.4). Not written yet: it needs the client's popup labels. |
 | `CacheConsistency` | With §4.5 on, run stun, cuff, sleep, crit and ghost transitions; no assert fires. |
 | `ClientPredictionMatchesServer` | After a predicted stun and after the server state arrives, the client's `IsBlocked` and `IsBlocked(…, Restrained)` match the server's (§2.3). |
 | `StationAiDoesNotUncancel` | An AI-held entity that something else has already cancelled stays cancelled (§5.1). |
@@ -1097,9 +1164,9 @@ public bool CanPerform(EntityUid user, in InteractionRequirements req,
 
 **Evaluation order** (cheapest first; the first failure wins, and supplies `reason`):
 
-1. **Conditions.** `IsBlocked(user, req.Action, req.Ignoring)`, from the cache (§4.3). The reason
-   comes from the condition (§10.2).
-2. **Creature properties** for `req.Action` (§15.4), plus `req.NeedComplex`.
+1. **Conditions.** `IsBlocked(user, req.Required, req.Ignoring)`, from the cache (§4.3). The
+   reason comes from the condition (§10.2).
+2. **Creature properties** for `req.Required` (§15.4).
 3. **Pair rule.** Raise `MobActionAttemptEvent` on the user (§15.3).
 4. **Target veto.** If `target` is set and isn't the user, raise `MobActionTargetAttemptEvent` on
    the target. For `UseHeld` and `Throw`, raise it on `used` as well.
@@ -1118,21 +1185,21 @@ public bool CanPerform(EntityUid user, in InteractionRequirements req,
 | `CanSpeak(user)`, `CanEmote(user)`, `CanChangeDirection(user)` | `CanPerform(user, {Speak / Emote / ChangeDirection})` |
 | `CanMove(user)` | `CanMove(user)`, the movement cache (§15.3) |
 | `UpdateCanMove(user)` | `Refresh(user)`: the caller is a producer whose state changed |
-| `CanComplexInteract(user)` | creature property (§15.4), still exposed as a helper |
+| `CanComplexInteract(user)` | `Complex` in the mask, a creature property (§15.4); still exposed as a helper |
 | `CanShiver`, `CanSweat` | deleted. They have callers (`ThermalRegulatorSystem.cs:90/97`) but no subscribers, so they always return true. |
 
 ### 15.3 The two events, and movement
 
 ```csharp
 [ByRefEvent]
-public record struct MobActionAttemptEvent(EntityUid User, MobAction Action, EntityUid? Target, EntityUid? Used)
+public record struct MobActionAttemptEvent(EntityUid User, MobCapability Required, EntityUid? Target, EntityUid? Used)
 {
     public bool Cancelled;
     public string? Reason;   // optional, localized; shown by consumers that report failures
 }
 
 [ByRefEvent]
-public record struct MobActionTargetAttemptEvent(EntityUid User, MobAction Action, EntityUid? Used)
+public record struct MobActionTargetAttemptEvent(EntityUid User, MobCapability Required, EntityUid? Used)
 {
     public bool Cancelled;
     public string? Reason;
@@ -1145,7 +1212,7 @@ public record struct MobActionTargetAttemptEvent(EntityUid User, MobAction Actio
   - `MobActionTargetAttemptEvent` takes over `GettingInteractedWithAttemptEvent`,
     `GettingPickedUpAttemptEvent`, `GettingUsedAttemptEvent`, `ThrowItemAttemptEvent` and
     `GettingAttackedAttemptEvent`.
-- A handler switches on `Action`. One subscription per system covers every action it cares
+- A handler tests the `Required` bits it cares about. One subscription per system covers every action it cares
   about, which also avoids the engine's one-subscription-per-component-and-event limit.
 - **`Reason` replaces ad-hoc popups** inside attempt handlers. Examples are the multi-handed
   item popup and the worm's stand-up message. The consumer decides whether to show it.
@@ -1164,13 +1231,16 @@ public record struct MobActionTargetAttemptEvent(EntityUid User, MobAction Actio
 
 The bookkeeper reads these components at query time. They change rarely, so they aren't cached.
 
-| Action | Requires | Today |
+| Capability | Requires | Today |
 |---|---|---|
-| any, when `NeedComplex` | `ComplexInteractionComponent` | `ActionBlockerSystem.CanComplexInteract` |
+| `Complex` | `ComplexInteractionComponent` | **Done.** It was `ActionBlockerSystem.CanComplexInteract` and `NeedComplex`. |
 | `Speak` | an enabled `SpeechComponent` | `SpeechSystem` broadcast cancel |
 | `Emote` | an enabled `EmotingComponent` | `EmoteSystem` broadcast cancel |
 | `Point` | not `BrainComponent` or `BorgBrainComponent` (no body to point with) | `BrainSystem`, `SharedBorgSystem` cancels |
 | `Move` | `InputMoverComponent` and a non-static physics body | `SharedMoverController.OnCanMove` |
+
+A missing property blocks its capability. `CheckSelf` tests the required mask against the
+property-blocked bits after the conditions. A property block has no reason.
 
 `Move` is the exception to "not cached": it feeds the movement cache. A change of body type
 must therefore call `Refresh`, the same way it calls `UpdateCanMove` today.
@@ -1205,6 +1275,9 @@ dependency: `ActionBlockerSystem` depends on the bookkeeper, never the other way
   no attempt event at all. Stand up keeps its in/out event data through a typed `CanStandUp`.
 - All of §16.2.
 - Producers no longer add the component or hook lifecycle events for the bookkeeper (§4.4).
+- Requirements are masks, and `Complex` is the first property bit (§15.4).
+- Muting declares `Silenced` through the status-effect relay (§6.5). Force-say and last words
+  are masks (§5.4).
 
 ### 15.6 Vocabulary changes
 
@@ -1217,7 +1290,7 @@ member is added together with the producer or consumer that needs it.
 |---|---|---|
 | `Pinned` | `StandUp` | the `KnockdownStatusEffect` (through the Q1 relay), Worm |
 | `PostureLocked` | `Stand`, `Down` | buckle (while buckled), cryo pod occupant |
-| `Silenced` | `Speak`, `Emote` | admin freeze with `Muted`, the muted status effect (through the Q1 relay) |
+| `Silenced` | `Speak` | the muted status effect, through the Q1 relay. **Done** (§6.5). Not the admin freeze: an admin mute must not be forgivable, so it becomes a pair rule (§16.3). Not `Emote`: mimes emote. |
 
 **New actions:**
 
@@ -1264,7 +1337,7 @@ Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migra
 | `SharedCuffableSystem.HandleMoveAttempt` (`:259`) | Move, while restrained *and* pulled | `Immobilized`, while restrained and pulled | `OnPull` already fires on pull start and stop; it becomes `Refresh`. |
 | `SharedGhostSystem` (`Ghost/Systems/SharedGhostSystem.cs`) | Use, Emote, Drop, Pickup, Interaction | `Incorporeal` | |
 | `LegsParalyzedSystem` (`Traits/Assorted/LegsParalyzedSystem.cs`) | Move | `Immobilized` | |
-| `AdminFrozenSystem` (`Administration/AdminFrozenSystem.cs`) | Use, Pickup, Throw, Interaction, Attack, ChangeDirection, Move; Speak and Emote if `Muted` | `Incapacitated \| Immobilized`, plus `Silenced` if `Muted` | Delta: +`Drop` (Q7). |
+| `AdminFrozenSystem` (`Administration/AdminFrozenSystem.cs`) | Use, Pickup, Throw, Interaction, Attack, ChangeDirection, Move; Speak and Emote if `Muted` | `Incapacitated \| Immobilized` | Delta: +`Drop` (Q7). The `Muted` speech and emote block is a pair rule (§16.3), not `Silenced`, so no mask can forgive it. |
 | `SharedVentriloquistPuppetSystem` (`Puppet/SharedVentriloquistPuppetSystem.cs`) | Use, Interaction, Drop, Pickup, Move, ChangeDirection, Emote | `Incapacitated \| Immobilized` | Delta: +`Attack`, +`Throw` (Q7). The Emote block moves to bucket 4: check that the puppet prototype (`Objects/Fun/toys.yml:167`) has no enabled emoting. |
 | `SharedKitchenSpikeSystem`, `KitchenSpikeHookedComponent` | ChangeDirection, Use, Throw, Drop, Attack, Pickup | `Incapacitated` | Delta: +`Interact` (Q7). |
 | `SharedBeingDisposedSystem` | Interaction, Attack | `HandsBlocked` | Delta: +`UseHeld`, `Pickup`, `Drop` (Q7). |
@@ -1278,7 +1351,7 @@ Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migra
 | `VehicleSystem`, `VehicleOperatorComponent` (`:82`) | Move when the operator can't operate | `Immobilized`, **on the vehicle**, when its operator can't operate | **Cross-entity.** The vehicle refreshes on its operator's `MobConditionsChangedEvent` (broadcast). This removes the R1 re-entrancy case: no handler calls `CanX` on its own entity any more. |
 | `SharedShuttleConsoleSystem`, `PilotComponent` | Move while piloting | `Immobilized` | |
 | `SharedInteractionSystem.Blocking`, `BlockMovementComponent` | Interaction, Drop, Pickup if `BlockInteraction`; Use if `BlockUse`; Move and ChangeDirection always | `HandsBlocked` for the interaction flags; `Immobilized` for movement | `ChangeDirection` has no matching condition (Q11). |
-| `MutedStatusEffectSystem` (`Speech/Muting/MutedStatusEffectSystem.cs`) | Speak, through the status-effect relay, with a popup | `Silenced`, through the Q1 relay | The popup becomes the `Silenced` failure reason. The relay ordering in §5.4 disappears: the reason priority (Unconscious first) already keeps a dead mime quiet. |
+| `MutedStatusEffectSystem` (`Speech/Muting/MutedStatusEffectSystem.cs`) | Speak, through the status-effect relay, with a popup | `Silenced`, through the Q1 relay | **Done** (§6.5). The popup became the failure reason, which the effect words through `GetMobConditionReasonEvent`. Chat shows it at send time, except to an unconscious mind, so the §5.4 relay ordering is gone. |
 | `ReplaySpectatorSystem` (`Content.Client/Replay/Spectator/ReplaySpectatorSystem.Blockers.cs`) | Use, Pickup, Throw, Interaction, Attack, Drop, Move, ChangeDirection | `Incorporeal \| Immobilized` | Client-only, so it is the one exception to §6.1.6: a replay has no server to disagree with. |
 
 ### 16.2 Bucket 2: target vetoes (`MobActionTargetAttemptEvent`)
@@ -1309,6 +1382,7 @@ used to stay silent.
 | `SharedBuckleSystem` (`Buckle/SharedBuckleSystem.Buckle.cs:42`) | StartPull | Can't pull the thing you're buckled to, unless `PullStrap`. |
 | `VehicleSystem` (`Vehicle/Systems/VehicleSystem.cs:103`) | Attack | An operator can't attack their own vehicle when the vehicle `CanAttack`. |
 | `VehicleSystem` (`:93`) | `CanAttackFromContainerEvent` | Lets an operator attack out of their vehicle. It becomes an exception to the built-in container rule (§15.2). |
+| `AdminFrozenSystem` (`Administration/AdminFrozenSystem.cs:34`) | Speak and Emote, if `Muted` | An admin-muted user can't speak or emote. A pair rule, not `Silenced`, because a mask must never forgive it: Last Words forgive `Silenced`. |
 | `DnaImprintEntityEffectSystem`, `NPCImprintedComponent` (`Content.Server/EntityEffects/Effects/DnaImprintEntityEffectSystem.cs:130`) | Attack | An imprinted NPC won't attack friends. Server-only: unlike conditions, a pair rule is evaluated at query time, so a server-only rule only mispredicts for NPCs, which aren't predicted anyway. |
 
 ### 16.4 Bucket 4: creature properties
@@ -1320,21 +1394,25 @@ used to stay silent.
 | `BrainSystem` (`Body/Systems/BrainSystem.cs:20`) | Point | `BrainComponent` denies `Point` |
 | `SharedBorgSystem` (`Silicons/Borgs/SharedBorgSystem.cs:101`) | Point | `BorgBrainComponent` denies `Point` |
 | `SharedMoverController` (`Movement/Systems/SharedMoverController.cs:93`) | Move | `InputMoverComponent` with a non-static body |
-| `ActionBlockerSystem.CanComplexInteract` | (a method, not an event) | `ComplexInteractionComponent` |
+| `ActionBlockerSystem.CanComplexInteract` | (a method, not an event) | `ComplexInteractionComponent`. **Done:** the `Complex` bit. |
 
 ### 16.5 N: not gates
 
 | System | Event today | Destination |
 |---|---|---|
 | `DnaImprintEntityEffectSystem`, `DNALeaderComponent` (`:115`) | Point (never cancels) | `AfterPointedAtEvent` (§15.7) |
+| `MutedStatusEffectSystem` | `EmoteEvent`, `EmoteActionEvent` (relayed) | Stays. It muffles vocal emotes and the scream action rather than gating anything. |
 
 ### 16.6 Status-effect relays
 
 The relays in `StatusEffectNew/StatusEffectSystem.Relay.cs` are plumbing, not rules:
 - **`UpdateCanMoveEvent` (`:43`):** no subscribers. Delete it.
-- **`StandUpAttemptEvent` (`:51`) and `SpeakAttemptEvent` (`:60`):** replaced by one relay of
-  `RefreshMobConditionsEvent` (Q1). Through it, the knockdown and muted status effects declare
-  `Pinned` and `Silenced`.
+- **`RefreshMobConditionsEvent` and `GetMobConditionReasonEvent`:** relayed (Q1, done). The muted
+  status effect declares `Silenced` and words its reason through them.
+- **`SpeakAttemptEvent` (`:60`):** no upstream subscribers left. It stays relayed for downstream
+  subscribers while `SpeakAttemptEvent` exists.
+- **`StandUpAttemptEvent` (`:51`):** replaced by the same relay once the knockdown status effect
+  declares `Pinned` (Q2).
 
 ## Appendix A: the July prototype
 
@@ -1367,6 +1445,31 @@ code needs these changes:
   - The EntityCondition bridge (§10).
   - The #46045 range cancel and open veto, which must be kept (§8.2).
   - The open side-effect audit (§8.5) and the cache consistency check (§4.5).
+
+## Appendix E: fourth review (2026-10-23)
+
+A design review of the demo. Changed:
+- **Requirements are a set.** `MobAction` became `MobCapability`, and `InteractionRequirements.Required`
+  and both rule events carry a mask. `NeedComplex` became the `Complex` bit, the first creature
+  property (§15.4).
+- **The crit speech grant left the bookkeeper.** What the self-check called "last words" was the
+  damage force-say grant. It was hardcoded there and spent inside a query. Chat now forgives
+  `Unconscious` for the force-said message, at send time (§5.4).
+- **Muting is `Silenced`**, through the status-effect relay (Q1, §6.5). The Last Words action
+  forgives it by mask, instead of skipping every check. Chat shows speech popups, worded by the
+  source (§2.4).
+- **`StatusEffectsSystem` marks an effect applied before announcing it**, so refreshes in the
+  applied event see it.
+
+Decided:
+- **The cache stays (approach A).** Checking live on every query was considered. It is safer
+  when a producer forgets to refresh, because only reactions (movement, the UI sweep) would lag.
+  But it re-polls every producer on every check. `CanPerform` hides the cache, so this can be
+  revisited without changing the API.
+- **The admin freeze's mute is not `Silenced`.** It must stay unforgivable, so it becomes a pair
+  rule (§16.3).
+- **The target events keep their names** for now. "Mob" in `MobActionTargetAttemptEvent` refers
+  to the user, not the target, which can be any entity.
 
 ## Appendix D: third review (2026-10-22)
 

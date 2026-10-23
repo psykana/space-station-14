@@ -21,9 +21,9 @@ decision, so the wiring is N sources × M actions of hand-written cancel handler
 
 | System | Attempt-event subscriptions | Of which pure cancels |
 |---|---|---|
-| `Mobs/Systems/MobStateSystem.Subscribers.cs` | **13** | 12. Eleven route to one `CheckAct`, whose body is `switch (CurrentState) { case Dead: case Critical: args.Cancel(); }`. The Speak handler adds the last-words exception. |
+| `Mobs/Systems/MobStateSystem.Subscribers.cs` | **13** | 12. Eleven route to one `CheckAct`, whose body is `switch (CurrentState) { case Dead: case Critical: args.Cancel(); }`. The Speak handler adds the force-say exception. |
 | `Stunnable/SharedStunSystem.cs` | **8**, plus a status-effect `StandUpAttemptEvent` relay | 8 |
-| `Bed/Sleep/SleepingSystem.cs` | **5** | 4. Speak carries the last-words exception. |
+| `Bed/Sleep/SleepingSystem.cs` | **5** | 4. Speak carries the force-say exception. |
 | `Cuffs/SharedCuffableSystem.cs` | **6** | 5 gated on `!CanStillInteract`. The sixth blocks movement only while restrained *and* pulled. |
 | `Ghost/Systems/SharedGhostSystem.cs` | **5** | 5 gated on `!CanGhostInteract` |
 | `Administration/AdminFrozenSystem.cs` | **9** | 7, plus Speak and Emote gated on `Muted` |
@@ -102,7 +102,7 @@ The model has three tiers, two closed enums, one component and one system, all i
 { Unconscious, Incapacitated, Restrained, HandsBlocked, Immobilized,
   Floored, UiBlocked, PullBlocked, Incorporeal }
 
-[Flags] public enum MobAction : uint        // the mobility_flags layer
+[Flags] public enum MobCapability : uint        // the mobility_flags layer
 { Interact, Conscious, UseHeld, Pickup, Drop, Attack, Throw, Speak, Emote,
   Point, Move, Stand, StandUp, Pull, ChangeDirection, UiAccess }
 ```
@@ -179,7 +179,7 @@ public sealed partial class MobConditionsComponent : Component
 {
     [AutoNetworkedField] public MobCondition Declared;  // union of producer Adds
     public MobCondition Conditions;                     // Expand(Declared), recomputed on state
-    public MobAction Blocked;                           // GetBlocked(Conditions), recomputed on state
+    public MobCapability Blocked;                           // GetBlocked(Conditions), recomputed on state
 }
 ```
 
@@ -276,14 +276,20 @@ Conditional logic is not boilerplate, so these handlers stay as they are:
   block a third party stripping a corpse.
 - Cuffs' `HandleMoveAttempt` only blocks movement while the mob is being pulled.
 
-`AllowNextCritSpeechComponent`, the "last words" escape hatch, is currently duplicated
-identically in `MobStateSystem` and `SleepingSystem`. It moves to one central place.
+`AllowNextCritSpeechComponent`, the damage force-say grant, was duplicated identically in
+`MobStateSystem` and `SleepingSystem`. It is often called "last words", but it isn't the Last
+Words action. When a mob goes crit, the server asks the client to send whatever was typed, and
+the grant lets that one ordinary chat message through.
 
-It can't be replaced by the ignore mechanism: it is a stateful one-shot grant with a timeout,
-not a property of the mob. Moving it has an ordering consequence (spec §5.4). The muted status
-effect's Speak relay is ordered `after: [typeof(MobStateSystem)]`
-(`StatusEffectSystem.Relay.cs:60`, #45977) so that a dead mime typing doesn't spam "you can't
-speak" popups. That ordering must move to `MobCapabilitiesSystem` along with Speak.
+It is a stateful one-shot grant with a timeout, not a property of the mob, so no producer can
+declare it. It doesn't belong to the bookkeeper either: spending it inside a query lets any
+speech check use it up. Chat spends it as the message is sent, and forgives `Unconscious` for
+that message through an ignore mask (spec §5.4).
+
+Muting works the same way. The muted status effect declares `Silenced`, and the Last Words
+action forgives `Unconscious | Silenced`. Chat shows the popup when a message is blocked, except
+to an unconscious mind, which replaces the relay ordering that kept a dead mime from spamming
+"you can't speak" (#45977).
 
 ## 5. UI status tiers
 
@@ -414,7 +420,7 @@ The two systems then meet at a small seam:
 - It bloated immediately once creature properties like writing and literacy were folded in.
 - A central `[Flags]` enum that keeps *growing* is hostile to a fork ecosystem: every downstream
   fork adds bits in the same place, and every upstream merge conflicts.
-- The chosen `MobCondition` and `MobAction` are also central enums. What makes them acceptable
+- The chosen `MobCondition` and `MobCapability` are also central enums. What makes them acceptable
   is that they are closed: they track `ActionBlockerSystem`'s own API, and tg's equivalents
   haven't changed in years.
 - The mistake was conflating action verbs with creature properties. Separating them removes
@@ -515,7 +521,7 @@ restraint.
   `UpdateCanMoveEvent` handler. That handler runs during `Refresh`. It is safe only because
   `Refresh` commits the new state *before* calling `UpdateCanMove`, and the spec makes that an
   invariant.
-- **Fork impact.** `MobCondition` and `MobAction` are additive, and no public component is
+- **Fork impact.** `MobCondition` and `MobCapability` are additive, and no public component is
   deleted. `InteractionAttemptEvent` gains an `Ignoring` field with a default, so existing
   subscribers compile unchanged. `ActionComponent.Requires` keeps the old bools readable for
   one release (spec §7).
