@@ -205,6 +205,32 @@ already block, because `CanPull` calls `CanInteract`. It is kept for tg parity, 
 call site can forgive it on its own. The UI phase (§5) adds `UiBlocked` and `UiAccess` the same
 way.
 
+### Capabilities: what a creature can do
+
+Conditions say what is stopping a mob right now. They can't say what its kind can't do at all:
+a mouse can't use a computer, and a brain in a jar can't point. Today those facts are a scatter
+of marker components, like `ComplexInteractionComponent`, and attempt-event cancels.
+
+The end state adds a capability layer (spec §15.4):
+- **A profile prototype is the baseline.** It says which capabilities this kind of creature has,
+  as differences from a default, and it never changes at runtime.
+- **Sources grant and revoke** in the same refresh that collects conditions: a component, an
+  item, an implant or a status effect.
+- `Capabilities = (Profile | Granted) & ~Revoked`. Revoke beats grant. Conditions then block on
+  top, and ignore masks forgive conditions only.
+
+**Why the baseline is immutable.** Every change at runtime has an owner that declares it, the
+same rule conditions follow. Nothing has to remember what a mob used to be, so nothing can
+drift, and "why can this mouse talk?" always has an answer on the entity. A permanent change,
+like cognizine sentience, is a source that stays.
+
+**Which layer?** If a call site should ever be able to forgive it, it is a condition. If it
+changes what the creature is, it is a capability.
+
+**Example: cognizine.** Sentience grants `Speak | Emote` through a component saved with the mob.
+A reagent that also grants `Complex` uplifts a monkey enough to use computers, with no code. The
+mob's conditions still apply, and a zombie's revokes still win.
+
 ## 4. What producers look like
 
 ```csharp
@@ -428,6 +454,10 @@ The two systems then meet at a small seam:
   haven't changed in years.
 - The mistake was conflating action verbs with creature properties. Separating them removes
   the pressure to grow.
+- **Revisited.** Spec §15.4 adds a capability baseline after all, but without what sank this
+  one. Its vocabulary is the closed `MobCapability`, not creature traits: literacy stays a
+  component. The base is an immutable prototype. And no current set is stored on the mob,
+  because it is projected from sources on every refresh.
 
 **Prototype-identified capabilities** (`ProtoId<CapabilityPrototype>` sets, like
 `TagComponent`).
@@ -448,6 +478,8 @@ restraint.
 
 ## 8. Not done yet
 
+- **Capabilities** (spec §15.4): profiles, grants and revokes are designed, not built. `Complex`
+  is still the `ComplexInteractionComponent` marker.
 - **Side effects on conditions.** tg hangs `drop_all_held_items()` off `HANDS_BLOCKED` and
   `stop_pulling()` off `PULL_BLOCKED`. In SS14 the drop is `DropHandItemsEvent`, raised from
   `MobStateSystem.Down()` (`Subscribers.cs:55`), so it is tied to mob state specifically.

@@ -103,7 +103,7 @@ event the bookkeeper still raises for it.
 | `ChangeDirection` | 13 | `ChangeDirectionAttemptEvent` (`Content.Shared.Interaction.Events`) |
 | `StandUp` | 14 | `StandUpAttemptEvent` (`Content.Shared.Stunnable`, by-ref) |
 | `Down` | 15 | `DownAttemptEvent` (`Content.Shared.Standing`). Not blocked by `Unconscious`: crit and death lie the mob down. |
-| `Complex` | 16 | none. A creature property (§15.4): the mob has `ComplexInteractionComponent`. No condition blocks it. |
+| `Complex` | 16 | none. A capability, not blocked by any condition. Today it means having `ComplexInteractionComponent`; in the end state it comes from the creature's profile (§15.4). |
 
 `enum MobCapability : uint`, `[Flags, Serializable, NetSerializable]`, `None = 0`.
 
@@ -182,9 +182,9 @@ public partial record struct InteractionRequirements()
 }
 ```
 
-`Required` is a mask. The act is blocked if any capability in it is blocked, by a condition or
-by a creature property such as `Complex` (§15.4). It replaced a single `Action` and a
-`NeedComplex` bool.
+`Required` is a mask. The act is blocked if any capability in it is missing (`Complex`, for
+example, §15.4) or blocked by a condition. It replaced a single `Action` and a `NeedComplex`
+bool.
 
 It is named to avoid confusion with `ActionRequirementsComponent`/`ActionRequirementsSystem`
 (`Content.Shared.Actions`, #46029), which is a different feature (design §6). The prototype
@@ -273,7 +273,7 @@ The cascade is applied repeatedly until nothing changes, so the order of rules d
   pin knocked-down mobs forever.
 - `Point` is not blocked by `Incapacitated`. A stunned but awake mob can gesture, which is
   today's behaviour.
-- No condition blocks `Complex`. It is a creature property (§15.4).
+- No condition blocks `Complex`. It is a capability (§15.4).
 - `Silenced` doesn't block `Emote`. Mimes emote; muting only muffles vocal emotes, which is
   not a gate (§16.5).
 - For the slice-1 producers, today's semantics are preserved, with the one delta below. Each
@@ -590,7 +590,7 @@ delta as a stated gameplay change, or keep a residual event and pick a narrower 
 | VentriloquistPuppet | `Puppet/SharedVentriloquistPuppetSystem.cs:18–24` | Use, Interaction, Drop, Pickup, UpdateCanMove, Emote, ChangeDirection | `Incapacitated \| Immobilized`, with Emote kept as an event | +`Attack`, +`Throw` |
 | KitchenSpike | `Kitchen/SharedKitchenSpikeSystem.cs:75–80` | ChangeDirection, Use, Throw, Drop, Attack, Pickup (**not** Interaction) | `Incapacitated` | +`Interact`, +`Pull` |
 | BeingDisposed | `Disposal/Unit/SharedBeingDisposedSystem.cs:27–28` | Interaction, Attack | `HandsBlocked` | +`UseHeld`, +`Pickup`, +`Drop` |
-| Brain / BorgBrain | `Body/Systems/BrainSystem.cs:20`, `Silicons/Borgs/SharedBorgSystem.cs:101` | Point | leave as events (creature property: no body to point with; `BrainComponent` is not networked, §6.1.6) | — |
+| Brain / BorgBrain | `Body/Systems/BrainSystem.cs:20`, `Silicons/Borgs/SharedBorgSystem.cs:101` | Point | not a condition: no body to point with. The `Brain` capability profile lacks `Point` (§15.4), which needs no networking. | — |
 | Worm | `Movement/Systems/WormSystem.cs:19` | StandUp (+ message, autostand) | leave (sets extra fields) | — |
 | Chasm, TetherGun | `Chasm/ChasmSystem.cs:107`, `Weapons/Misc/SharedTetherGunSystem.cs:51` | UpdateCanMove | `Immobilized` | none |
 
@@ -994,6 +994,9 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
 | Q12 | `PostureLocked` blocks both `Stand` and `Down`, but the cryo pod only cancels `Down` today (§16.1). | Accept it: an occupant of a pod is already upright and can't move, so blocking `Stand` changes nothing observable. |
 | Q13 | Pair rules (§15.3) and target vetoes (§15.4) are not cached. Is that a performance problem? | Not yet. Only a handful of subscribers handle each event, and the hot path (bucket 1) stays cached. Measure before optimizing. |
 | Q14 | `MobCapabilitiesSystem.CanPickup(…, showPopup: true)` shows whatever reason blocked the pickup. But `SharedHandsSystem.TryPickup` hardwires `showPopup: true` (`SharedHandsSystem.Pickup.cs:90`), including for its ~95 programmatic callers such as `PickupOrDrop`. So an item handed to a stunned, cuffed or crit mob pops up "You can't do that while incapacitated" although nobody tried anything. | **Proposed fix:** show the reason in the consumer that knows a person initiated the action. (1) The bookkeeper never shows popups: `CanPickup` returns the reason, and `showPopup` only feeds the legacy pickup events. (2) `SharedHandsSystem.CanPickupToHand(…, showPopup)` shows the reason when asked. (3) `TryPickup` and `TryPickupAnyHand` take `bool showPopup = false` instead of hardwiring `true`, and the player-initiated paths pass `true`: picking up by clicking (`SharedItemSystem.OnHandInteract`, `Item/SharedItemSystem.cs:135`) and ejecting from item slots, which already passes it. Programmatic pickups then show no popup at all, not even the multi-handed message. That is correct, because nobody tried anything. Not implemented yet. |
+| Q15 | `SentienceComponent` is shared by every `MakeSentient` caller (§15.4), so their grants combine. Is that acceptable? | Yes for sentience, which is never taken away. A grant that may be removed gets its own component. |
+| Q16 | Do `Speak` and `Emote` become opt-out (the default has them, and creatures that can't talk name a profile that lacks them) or opt-in, like `Complex`? | Opt-out matches "everything unless blocked", but it needs an audit of every mob without `SpeechComponent` or `EmotingComponent`. Until it is decided, the component checks stay (§16.4). |
+| Q17 | Rename `MobConditionsComponent` to `MobCapabilitiesComponent`, now that it holds the profile and the grants? | Yes, together with §15.4. |
 
 ## 12. PR slicing for upstream
 
@@ -1031,6 +1034,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
    - the two end-state events;
    - one PR per bucket area of §16;
    - the movement cache;
+   - capabilities (§15.4);
    - the call-site migration;
    - removing `ActionBlockerSystem` and the obsolete events, a release after the new API is stable.
 
@@ -1064,6 +1068,8 @@ A demo implements a vertical slice of the model, one commit per step.
 - **The UI tiers (§8)**, paper read-only and the close sweep. They were implemented here, then
   reverted: they are a refactor of their own, for a later phase. UIs, spectators included,
   behave as on master.
+- **Capabilities** (§15.4): profiles, grants and revokes are designed, not built. `Complex` is
+  still read from `ComplexInteractionComponent`.
 - **Not migrated:** the action-bar `Requires` (§7), the EntityCondition bridge (§10.1), and the Ghost, Knockdown and LegsParalyzed producers. The §6.3 sources aren't migrated either. Their attempt events work as before.
 
 ## 13. Tests
@@ -1148,11 +1154,12 @@ It owns four mechanisms, one per bucket of §16:
 | 1. Conditions | What is wrong with the entity? | producers declare `MobCondition`s (§2–4) | yes |
 | 2. Target vetoes | Can this target be acted on at all? | one event raised on the target (§15.3) | no |
 | 3. Pair rules | Is this action allowed for this user against this target? | one event raised on the user (§15.3) | no |
-| 4. Creature properties | Does the entity have the faculty at all? | components the bookkeeper reads (§15.4) | no |
+| 4. Capabilities | What can this kind of creature do at all? | an immutable profile prototype, plus grants and revokes declared by sources (§15.4) | yes |
 
 **Rules:**
 - **The bookkeeper answers for any entity**, mob or not: borgs, AI eyes and vehicles too. An
-  entity without `MobConditionsComponent` has no conditions, but buckets 2–4 still apply to it.
+  entity without `MobConditionsComponent` has no conditions and the default capabilities
+  (§15.4), and buckets 2 and 3 still apply to it.
 - **No other system raises an event to decide whether an action is blocked.** In the end state,
   the typed attempt events (`InteractionAttemptEvent`, `UseAttemptEvent`, `UpdateCanMoveEvent`,
   `StandAttemptEvent`, `GettingPickedUpAttemptEvent` and the rest) no longer exist.
@@ -1174,9 +1181,11 @@ public bool CanPerform(EntityUid user, in InteractionRequirements req,
 
 **Evaluation order** (cheapest first; the first failure wins, and supplies `reason`):
 
-1. **Conditions.** `IsBlocked(user, req.Required, req.Ignoring)`, from the cache (§4.3). The
+1. **Capabilities.** Every required capability must be in the creature's capabilities (§15.4).
+   A missing one is more basic than any condition, so it is checked, and explains the failure,
+   first.
+2. **Conditions.** `IsBlocked(user, req.Required, req.Ignoring)`, from the cache (§4.3). The
    reason comes from the condition (§10.2).
-2. **Creature properties** for `req.Required` (§15.4).
 3. **Pair rule.** Raise `MobActionAttemptEvent` on the user (§15.3).
 4. **Target veto.** If `target` is set and isn't the user, raise `MobActionTargetAttemptEvent` on
    the target. For `UseHeld` and `Throw`, raise it on `used` as well.
@@ -1195,7 +1204,7 @@ public bool CanPerform(EntityUid user, in InteractionRequirements req,
 | `CanSpeak(user)`, `CanEmote(user)`, `CanChangeDirection(user)` | `CanPerform(user, {Speak / Emote / ChangeDirection})` |
 | `CanMove(user)` | `CanMove(user)`, the movement cache (§15.3) |
 | `UpdateCanMove(user)` | `Refresh(user)`: the caller is a producer whose state changed |
-| `CanComplexInteract(user)` | `Complex` in the mask, a creature property (§15.4); still exposed as a helper |
+| `CanComplexInteract(user)` | `HasCapability(user, Complex)` (§15.4), or `Complex` in the mask |
 | `CanShiver`, `CanSweat` | deleted. They have callers (`ThermalRegulatorSystem.cs:90/97`) but no subscribers, so they always return true. |
 
 ### 15.3 The two events, and movement
@@ -1229,7 +1238,7 @@ public record struct MobActionTargetAttemptEvent(EntityUid User, MobCapability R
 
 **Movement.** The bookkeeper owns the movement cache:
 - `InputMoverComponent.CanMove` is written only by `Refresh`. Its value is
-  `(Blocked & Move) == 0`, together with the movement creature property (§15.4).
+  `(Blocked & Move) == 0`, together with the movement check on the body (§15.4).
 - `Refresh` raises `CanMoveUpdatedEvent` when the value changes, and so does the client-side
   derivation in `AfterAutoHandleStateEvent`.
 - `UpdateCanMoveEvent` is deleted. Each of its subscribers becomes a producer (§16.1), and each
@@ -1237,23 +1246,133 @@ public record struct MobActionTargetAttemptEvent(EntityUid User, MobCapability R
 - This removes today's two-cache synchronization. That includes the extra `UpdateCanMove` calls
   in the demo's stun producer and in `OnHandleState`.
 
-### 15.4 Creature properties
+### 15.4 Capabilities: profiles, grants and revokes
 
-The bookkeeper reads these components at query time. They change rarely, so they aren't cached.
+> **Designed, not implemented.** The demo still reads `ComplexInteractionComponent` at query
+> time (`GetPropertyBlocked`). This section replaces it.
 
-| Capability | Requires | Today |
+Two layers answer "can it?":
+- **Capabilities:** what this kind of creature can do at all. A mouse can't use a computer, and
+  a brain can't point.
+- **Conditions** (§2–4): what is stopping it right now.
+
+```
+Profile      = (Default | profile.Innate) & ~profile.Lacking
+Capabilities = (Profile | Granted) & ~Revoked
+CanPerform   requires (required & ~Capabilities) == 0 and (required & Blocked) == 0
+```
+
+**Rules:**
+- **Revoke beats grant.**
+- **Grants don't override conditions.** A grant gives a creature something its kind lacks; it
+  doesn't uncuff anyone.
+- **Ignore masks forgive conditions only.** A missing capability can't be forgiven at a call site.
+- **Choosing a layer.** If a call site should ever be able to forgive the block, it is a
+  condition. If it changes what the creature is, it is a capability.
+- **The vocabulary stays closed.** A capability exists because the bookkeeper's API asks for it,
+  not to model creature traits in general. Literacy and the like stay their own components
+  (design §7).
+
+**Profiles.** The baseline is a prototype, so nothing can change it at runtime.
+
+```csharp
+[Prototype("mobCapabilityProfile")]
+public sealed partial class MobCapabilityProfilePrototype : IPrototype
+{
+    [IdDataField] public string ID { get; private set; } = default!;
+    [DataField] public MobCapability Innate;   // added to the built-in default
+    [DataField] public MobCapability Lacking;  // removed from it
+}
+```
+
+```yaml
+- type: mobCapabilityProfile
+  id: Dexterous      # humanoids, borgs, the AI, the admin ghost, guardians, xenos
+  innate: [Complex]
+
+- type: mobCapabilityProfile
+  id: Brain
+  lacking: [Point]
+```
+
+The component names one:
+`[DataField, AutoNetworkedField] public ProtoId<MobCapabilityProfilePrototype>? Profile;`
+- **The built-in default** is every capability except `Complex`. That is today's behaviour:
+  everything is allowed unless something blocks it, and `Complex` is opt-in. A component without
+  a profile, and an entity without the component, both get the default.
+- **Profiles are differences from the default**, so a capability added later reaches every
+  profile without an edit.
+- **The ID never changes at runtime.** It travels with the initial state and is saved as an ID.
+  Writes are restricted with `[Access]`, and there is no setter.
+- **Profiles are prototype data**, so the client always knows them. That also settles the §6.1.6
+  problem for the brain's `Point` block: `BrainComponent` isn't networked, but the profile needs
+  no networking.
+
+**Sources.** Every change at runtime is declared by something on the entity: a component, an
+item, an implant or a status effect. `RefreshMobConditionsEvent` gains two methods next to
+`Add(MobCondition)`:
+
+```csharp
+public void Grant(MobCapability capabilities);
+public void Revoke(MobCapability capabilities);
+```
+
+- The §6.1 producer rules apply unchanged. The handler only declares, the source refreshes when
+  its state flips, and it is shared and networked.
+- **A permanent change is a source that stays**, saved with the entity. Nothing stores what the
+  baseline used to be, and every capability has a visible cause: the profile, or a source.
+- **A removable source MUST be its own component.** Sources that share a component share their
+  grants, so removing one would take away the other's.
+- `Granted` and `Revoked` are cached and networked next to `Declared`, and §4.5 verifies them.
+- `MobConditionsChangedEvent` also fires when `Capabilities` change, carrying the old and new
+  sets.
+
+**Queries.**
+- `HasCapability(uid, capabilities)` answers from the capability layer only, ignoring
+  conditions. It replaces `CanComplexInteract`.
+- `CanPerform` checks capabilities first (§15.2). A missing capability's reason comes from
+  `mob-capability-lacking-<member>`, for example "You lack the dexterity to do that."
+
+**Mapping**, which replaces the creature-property table:
+
+| Capability | Today | Becomes |
 |---|---|---|
-| `Complex` | `ComplexInteractionComponent` | **Done.** It was `ActionBlockerSystem.CanComplexInteract` and `NeedComplex`. |
-| `Speak` | an enabled `SpeechComponent` | `SpeechSystem` broadcast cancel |
-| `Emote` | an enabled `EmotingComponent` | `EmoteSystem` broadcast cancel |
-| `Point` | not `BrainComponent` or `BorgBrainComponent` (no body to point with) | `BrainSystem`, `SharedBorgSystem` cancels |
-| `Move` | `InputMoverComponent` and a non-static physics body | `SharedMoverController.OnCanMove` |
+| `Complex` | `ComplexInteractionComponent`, read at query time | the `Dexterous` profile. The component becomes an obsolete grant source (below). |
+| `Point` | `BrainSystem` and `SharedBorgSystem` cancel | the `Brain` profile lacks it. |
+| `Speak`, `Emote` | `SpeechSystem` and `EmoteSystem` cancel without an enabled component | open (Q16). |
+| `Move` | `InputMoverComponent` and a non-static body | stays a check on the body, because it feeds the movement cache. A change of body type calls `Refresh`. |
 
-A missing property blocks its capability. `CheckSelf` tests the required mask against the
-property-blocked bits after the conditions. A property block has no reason.
+**Removing `ComplexInteractionComponent`.** It is a pure marker in 9 prototypes, read in 44 places,
+and removed at runtime in one, the zombie transform (`Zombies/ZombieSystem.Transform.cs:153`).
+1. **Prototypes:** the 9 prototypes name the `Dexterous` profile. `Body/species_appearance.yml`
+   covers every humanoid.
+2. **Deprecation window:** `ComplexInteractionComponent` becomes `[Obsolete]` and a grant source
+   that declares `Grant(Complex)`. Downstream prototypes keep working until the removal release.
+3. **Readers:** the 44 readers move to `HasCapability(Complex)`. The obsolete warnings track what
+   is left.
+4. **Zombies:** `ZombieComponent` declares `Revoke(Complex)` instead of removing the marker.
+   Revoke beats grant, so no item can give a zombie its hands back.
 
-`Move` is the exception to "not cached": it feeds the movement cache. A change of body type
-must therefore call `Refresh`, the same way it calls `UpdateCanMove` today.
+**Example: cognizine.** Today the reagent's `MakeSentient` effect
+(`EntityEffects/Effects/MakeSentientEntityEffectSystem.cs`) removes the squeak accents and adds
+a ghost role. When a ghost takes the role, `SharedMindSystem.MakeSentient`
+(`Mind/SharedMindSystem.cs:750`) ensures `SpeechComponent` and `EmotingComponent`. With
+capabilities:
+1. **The effect** still removes the accents and adds the ghost role. Accents are flavour.
+2. **`MakeSentient`** ensures a `SentienceComponent` (name open), adds its grants to the
+   component's `Grants` and refreshes. The component declares `Grant(Grants)` and is saved with
+   the mob. `SpeechComponent` is still ensured, for its sounds and verb.
+3. **Uplift is data.** The effect's `allowSpeech` bool becomes `grants: [Speak, Emote]`. A
+   reagent that also lists `Complex` uplifts a monkey enough to use computers: one line of YAML
+   and no code.
+4. **Results:**
+   - A mouse's default profile already has `Speak`, so nothing changes for it. A creature whose
+     profile lacks `Speak` gains it.
+   - Conditions still apply: a sentient mouse in crit can't speak, and last words still forgive
+     that.
+   - If the mob later becomes a zombie, the zombie's revokes win.
+5. **Shared callers:** ghost roles, the admin verb, polymorph, zombification and the changeling
+   slug all call `MakeSentient`. They share `SentienceComponent`, and with it their grants (Q15).
 
 ### 15.5 Migration
 
@@ -1270,12 +1389,15 @@ must therefore call `Refresh`, the same way it calls `UpdateCanMove` today.
 2. **Move subscribers out, one §16 row per commit.** When an event has no upstream subscribers
    left, mark it `[Obsolete]` and keep raising it until the removal release (§1).
 3. **Move the movement cache** (§15.3) once every `UpdateCanMoveEvent` row has moved.
-4. **Move the ~140 call sites** to the bookkeeper, one PR per area. This is mechanical, and
+4. **Add capabilities** (§15.4): profile prototypes, grants and revokes. Name the profiles in
+   prototypes, make `ComplexInteractionComponent` an obsolete grant source, and move bucket 4
+   (§16.4) over.
+5. **Move the ~140 call sites** to the bookkeeper, one PR per area. This is mechanical, and
    the `[Obsolete]` warnings track what is left.
-5. **Remove `ActionBlockerSystem` and the obsolete events** in a later release, once the new API
-   has been stable for one.
+6. **Remove `ActionBlockerSystem`, `ComplexInteractionComponent` and the obsolete events** in a
+   later release, once the new API has been stable for one.
 
-Steps 2–4 can interleave. Step 1 has to come first, because it fixes the direction of the
+Steps 2–5 can interleave. Step 1 has to come first, because it fixes the direction of the
 dependency: `ActionBlockerSystem` depends on the bookkeeper, never the other way round.
 
 **Done so far:**
@@ -1285,7 +1407,8 @@ dependency: `ActionBlockerSystem` depends on the bookkeeper, never the other way
   no attempt event at all. Stand up keeps its in/out event data through a typed `CanStandUp`.
 - All of §16.2.
 - Producers no longer add the component or hook lifecycle events for the bookkeeper (§4.4).
-- Requirements are masks, and `Complex` is the first property bit (§15.4).
+- Requirements are masks. `Complex` is a capability bit, still read from
+  `ComplexInteractionComponent` until step 4.
 - Muting declares `Silenced` through the status-effect relay (§6.5). Force-say and last words
   are masks (§5.4).
 
@@ -1395,16 +1518,17 @@ used to stay silent.
 | `AdminFrozenSystem` (`Administration/AdminFrozenSystem.cs:34`) | Speak and Emote, if `Muted` | An admin-muted user can't speak or emote. A pair rule, not `Silenced`, because a mask must never forgive it: Last Words forgive `Silenced`. |
 | `DnaImprintEntityEffectSystem`, `NPCImprintedComponent` (`Content.Server/EntityEffects/Effects/DnaImprintEntityEffectSystem.cs:130`) | Attack | An imprinted NPC won't attack friends. Server-only: unlike conditions, a pair rule is evaluated at query time, so a server-only rule only mispredicts for NPCs, which aren't predicted anyway. |
 
-### 16.4 Bucket 4: creature properties
+### 16.4 Bucket 4: capabilities
 
-| System | Event today | Property (§15.4) |
+| System | Event today | Becomes (§15.4) |
 |---|---|---|
-| `SpeechSystem` (`Speech/SpeechSystem.cs:9`) | Speak (broadcast) | `SpeechComponent` |
-| `EmoteSystem` (`Emoting/EmoteSystem.cs:9`) | Emote (broadcast) | `EmotingComponent` |
-| `BrainSystem` (`Body/Systems/BrainSystem.cs:20`) | Point | `BrainComponent` denies `Point` |
-| `SharedBorgSystem` (`Silicons/Borgs/SharedBorgSystem.cs:101`) | Point | `BorgBrainComponent` denies `Point` |
-| `SharedMoverController` (`Movement/Systems/SharedMoverController.cs:93`) | Move | `InputMoverComponent` with a non-static body |
-| `ActionBlockerSystem.CanComplexInteract` | (a method, not an event) | `ComplexInteractionComponent`. **Done:** the `Complex` bit. |
+| `SpeechSystem` (`Speech/SpeechSystem.cs:9`) | Speak (broadcast) | open (Q16); `SpeechComponent` until then |
+| `EmoteSystem` (`Emoting/EmoteSystem.cs:9`) | Emote (broadcast) | open (Q16); `EmotingComponent` until then |
+| `BrainSystem` (`Body/Systems/BrainSystem.cs:20`) | Point | the `Brain` profile lacks `Point` |
+| `SharedBorgSystem` (`Silicons/Borgs/SharedBorgSystem.cs:101`) | Point | the `Brain` profile lacks `Point` |
+| `SharedMoverController` (`Movement/Systems/SharedMoverController.cs:93`) | Move | stays a check on `InputMoverComponent` and the body |
+| `ActionBlockerSystem.CanComplexInteract` | (a method, not an event) | the `Dexterous` profile. The `Complex` bit is done; it still reads `ComplexInteractionComponent`. |
+| `ZombieSystem.Transform` (`Zombies/ZombieSystem.Transform.cs:153`) | removes `ComplexInteractionComponent` | `ZombieComponent` revokes `Complex` |
 
 ### 16.5 N: not gates
 
@@ -1484,6 +1608,11 @@ Decided:
   when a producer forgets to refresh, because only reactions (movement, the UI sweep) would lag.
   But it re-polls every producer on every check. `CanPerform` hides the cache, so this can be
   revisited without changing the API.
+- **Capabilities get a baseline, plus grants and revokes** (§15.4). The baseline is an
+  immutable profile prototype. Every change at runtime comes from a source that declares it,
+  so nothing stores a history and every capability has a visible cause.
+  `ComplexInteractionComponent` becomes an obsolete grant source, then goes. Designed, not
+  implemented.
 - **The admin freeze's mute is not `Silenced`.** It must stay unforgivable, so it becomes a pair
   rule (§16.3).
 - **The target events keep their names** for now. "Mob" in `MobActionTargetAttemptEvent` refers
