@@ -117,6 +117,11 @@ public sealed partial class SleepingSystem : EntitySystem
     /// </summary>
     private void OnSleepStateChanged(Entity<MobStateComponent> ent, ref SleepStateChangedEvent args)
     {
+        // These are all networked: the server state already carries the changes, and redoing them while it is
+        // applied removes the same components twice.
+        if (_gameTiming.ApplyingState)
+            return;
+
         if (args.FellAsleep)
         {
             // Just in case we're not using the sleeping status
