@@ -1,5 +1,4 @@
 using Content.Shared.CCVar;
-using Content.Shared.Damage.ForceSay;
 using Robust.Shared.Configuration;
 using Robust.Shared.Network;
 using Robust.Shared.Timing;
@@ -19,7 +18,6 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     [Dependency] private INetManager _net = default!;
 
     [Dependency] private EntityQuery<MobConditionsComponent> _query = default!;
-    [Dependency] private EntityQuery<AllowNextCritSpeechComponent> _critSpeechQuery = default!;
 
     /// <summary>
     /// The conditions a producer may declare, in the order failure reasons are picked.

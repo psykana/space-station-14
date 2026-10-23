@@ -39,6 +39,7 @@ public sealed partial class ChatSystem : SharedChatSystem
     [Dependency] private IRobustRandom _random = default!;
     [Dependency] private IAdminLogManager _adminLogger = default!;
     [Dependency] private ActionBlockerSystem _actionBlocker = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private ServerStationSystem _stationSystem = default!;
     [Dependency] private MobStateSystem _mobStateSystem = default!;
     [Dependency] private SharedAudioSystem _audio = default!;
@@ -130,9 +131,10 @@ public sealed partial class ChatSystem : SharedChatSystem
         ICommonSession? player = null,
         string? nameOverride = null,
         bool checkRadioPrefix = true,
-        bool ignoreActionBlocker = false)
+        bool ignoreActionBlocker = false,
+        MobCondition ignoring = MobCondition.None)
     {
-        TrySendInGameICMessage(source, message, desiredType, hideChat ? ChatTransmitRange.HideChat : ChatTransmitRange.Normal, hideLog, shell, player, nameOverride, checkRadioPrefix, ignoreActionBlocker);
+        TrySendInGameICMessage(source, message, desiredType, hideChat ? ChatTransmitRange.HideChat : ChatTransmitRange.Normal, hideLog, shell, player, nameOverride, checkRadioPrefix, ignoreActionBlocker, ignoring);
     }
 
     /// <inheritdoc />
@@ -146,7 +148,8 @@ public sealed partial class ChatSystem : SharedChatSystem
         ICommonSession? player = null,
         string? nameOverride = null,
         bool checkRadioPrefix = true,
-        bool ignoreActionBlocker = false
+        bool ignoreActionBlocker = false,
+        MobCondition ignoring = MobCondition.None
         )
     {
         if (HasComp<GhostComponent>(source))
@@ -168,7 +171,8 @@ public sealed partial class ChatSystem : SharedChatSystem
         if (!CanSendInGame(message, shell, player))
             return;
 
-        ignoreActionBlocker = CheckIgnoreSpeechBlocker(source, ignoreActionBlocker);
+        ignoreActionBlocker = CheckIgnoreSpeechBlocker(source, ignoreActionBlocker, out var hookIgnoring);
+        ignoring |= hookIgnoring;
 
         // this method is a disaster
         // every second i have to spend working with this code is fucking agony
@@ -213,7 +217,7 @@ public sealed partial class ChatSystem : SharedChatSystem
         {
             if (TryProcessRadioMessage(source, message, out var modMessage, out var channel))
             {
-                SendEntityWhisper(source, modMessage, range, channel, nameOverride, hideLog, ignoreActionBlocker);
+                SendEntityWhisper(source, modMessage, range, channel, nameOverride, hideLog, ignoreActionBlocker, ignoring);
                 return;
             }
         }
@@ -222,10 +226,10 @@ public sealed partial class ChatSystem : SharedChatSystem
         switch (desiredType)
         {
             case InGameICChatType.Speak:
-                SendEntitySpeak(source, message, range, nameOverride, hideLog, ignoreActionBlocker);
+                SendEntitySpeak(source, message, range, nameOverride, hideLog, ignoreActionBlocker, ignoring);
                 break;
             case InGameICChatType.Whisper:
-                SendEntityWhisper(source, message, range, null, nameOverride, hideLog, ignoreActionBlocker);
+                SendEntityWhisper(source, message, range, null, nameOverride, hideLog, ignoreActionBlocker, ignoring);
                 break;
             case InGameICChatType.Emote:
                 SendEntityEmote(source, message, range, nameOverride, hideLog: hideLog, ignoreActionBlocker: ignoreActionBlocker);

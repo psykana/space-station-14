@@ -1,4 +1,3 @@
-using Content.Shared.Damage.ForceSay;
 using Content.Shared.Emoting;
 using Content.Shared.Hands;
 using Content.Shared.Interaction.Components;
@@ -182,7 +181,7 @@ public sealed partial class MobCapabilitiesSystem
     {
         reason = null;
 
-        if (IsBlocked(user, req.Required, req.Ignoring) && !TryUseLastWords(user, req.Required))
+        if (IsBlocked(user, req.Required, req.Ignoring))
         {
             if (TryGetBlockedReason(user, req.Required, out var conditionReason, req.Ignoring))
                 reason = conditionReason;
@@ -225,18 +224,6 @@ public sealed partial class MobCapabilitiesSystem
             return false;
         }
 
-        return true;
-    }
-
-    /// <summary>
-    /// Last words: a one-shot grant with a timeout, so not something an ignore mask can express.
-    /// </summary>
-    private bool TryUseLastWords(EntityUid user, MobCapability required)
-    {
-        if ((required & MobCapability.Speak) == 0 || !_critSpeechQuery.HasComp(user))
-            return false;
-
-        RemCompDeferred<AllowNextCritSpeechComponent>(user);
         return true;
     }
 

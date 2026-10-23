@@ -1,6 +1,7 @@
 #nullable enable
 using Content.IntegrationTests.Fixtures.Attributes;
 using Content.IntegrationTests.Tests.Interaction;
+using Content.Server.Chat.Systems;
 using Content.Server.Cuffs;
 using Content.Shared.ActionBlocker;
 using Content.Shared.Cuffs.Components;
@@ -63,6 +64,7 @@ public sealed class MobConditionTest : InteractionTest
     protected override string PlayerPrototype => TestMob;
 
     [SidedDependency(Side.Server)] private readonly MobCapabilitiesSystem _sCapabilities = default!;
+    [SidedDependency(Side.Server)] private readonly ChatSystem _sChat = default!;
     [SidedDependency(Side.Server)] private readonly CuffableSystem _sCuffable = default!;
     [SidedDependency(Side.Server)] private readonly MobStateSystem _sMobState = default!;
     [SidedDependency(Side.Server)] private readonly SharedStunSystem _sStun = default!;
@@ -194,7 +196,7 @@ public sealed class MobConditionTest : InteractionTest
         await Server.WaitAssertion(() => Assert.That(SCan(MobCapability.Interact), Is.True));
     }
 
-    [Test, Description("A critical mob can't do anything, except say its last words once.")]
+    [Test, Description("A critical mob can't do anything, and the bookkeeper knows nothing of force-say grants.")]
     public async Task UnconsciousBlocksEverything()
     {
         await SetMobState(MobState.Critical);
@@ -216,18 +218,47 @@ public sealed class MobConditionTest : InteractionTest
                 Assert.That(SCan(MobCapability.Down), Is.True, "Crit must still be able to lie the mob down.");
             });
 
-            SEntMan.AddComponent<AllowNextCritSpeechComponent>(SPlayer);
-            Assert.That(SCan(MobCapability.Speak), Is.True, "Last words were not allowed.");
+            // The force-say grant is chat's to spend, at send time. A plain query must neither honor nor spend it.
+            SEntMan.AddComponent<AllowNextCritSpeechComponent>(SPlayer).Timeout = STiming.CurTime + TimeSpan.FromMinutes(1);
+            Assert.That(SCan(MobCapability.Speak), Is.False, "A speech query honored the force-say grant.");
+            Assert.That(SEntMan.HasComponent<AllowNextCritSpeechComponent>(SPlayer), "A speech query spent the force-say grant.");
         });
-
-        await RunTicks(1);
-        await Server.WaitAssertion(() => Assert.That(SCan(MobCapability.Speak), Is.False, "Last words were granted twice."));
 
         await SetMobState(MobState.Alive);
         await Server.WaitAssertion(() =>
         {
             Assert.That(SCan(MobCapability.Interact), Is.True);
             Assert.That(_sCapabilities.CanMove(SPlayer), Is.True);
+        });
+    }
+
+    [Test, Description("The force-say grant forgives unconsciousness for the next chat message only.")]
+    public async Task ForceSayForgivesUnconsciousOnce()
+    {
+        await SetMobState(MobState.Critical);
+
+        await Server.WaitAssertion(() =>
+        {
+            SEntMan.AddComponent<AllowNextCritSpeechComponent>(SPlayer).Timeout = STiming.CurTime + TimeSpan.FromMinutes(1);
+
+            // Last words skip the hook entirely, so they must not spend a pending force-say grant.
+            Assert.That(_sChat.CheckIgnoreSpeechBlocker(SPlayer, true, out var skipped), Is.True);
+            Assert.That(skipped, Is.EqualTo(MobCondition.None));
+
+            Assert.That(_sChat.CheckIgnoreSpeechBlocker(SPlayer, false, out var ignoring), Is.False);
+            Assert.That(ignoring, Is.EqualTo(MobCondition.Unconscious));
+
+            var req = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = ignoring };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, req), Is.True, "The force-said line was blocked.");
+        });
+
+        await RunTicks(1);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(SEntMan.HasComponent<AllowNextCritSpeechComponent>(SPlayer), Is.False, "The grant was not spent.");
+            _sChat.CheckIgnoreSpeechBlocker(SPlayer, false, out var ignoring);
+            Assert.That(ignoring, Is.EqualTo(MobCondition.None), "The grant forgave a second message.");
         });
     }
 

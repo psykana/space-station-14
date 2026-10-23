@@ -1,4 +1,5 @@
 using System.Linq;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Chat;
 using Content.Shared.Database;
 using Content.Shared.IdentityManagement;
@@ -12,16 +13,26 @@ namespace Content.Server.Chat.Systems;
 
 public sealed partial class ChatSystem
 {
+    private bool CanSpeak(EntityUid source, bool ignoreActionBlocker, MobCondition ignoring)
+    {
+        if (ignoreActionBlocker)
+            return true;
+
+        var req = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = ignoring };
+        return _capabilities.CanPerform(source, req, null, null, out _);
+    }
+
     private void SendEntitySpeak(
         EntityUid source,
         string originalMessage,
         ChatTransmitRange range,
         string? nameOverride,
         bool hideLog = false,
-        bool ignoreActionBlocker = false
+        bool ignoreActionBlocker = false,
+        MobCondition ignoring = MobCondition.None
         )
     {
-        if (!_actionBlocker.CanSpeak(source) && !ignoreActionBlocker)
+        if (!CanSpeak(source, ignoreActionBlocker, ignoring))
             return;
 
         var message = TransformSpeech(source, originalMessage);
@@ -91,10 +102,11 @@ public sealed partial class ChatSystem
         RadioChannelPrototype? channel,
         string? nameOverride,
         bool hideLog = false,
-        bool ignoreActionBlocker = false
+        bool ignoreActionBlocker = false,
+        MobCondition ignoring = MobCondition.None
         )
     {
-        if (!_actionBlocker.CanSpeak(source) && !ignoreActionBlocker)
+        if (!CanSpeak(source, ignoreActionBlocker, ignoring))
             return;
 
         var message = TransformSpeech(source, FormattedMessage.RemoveMarkupOrThrow(originalMessage));

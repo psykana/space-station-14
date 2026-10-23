@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Inventory;
 using Content.Shared.Radio;
 using Content.Shared.Speech;
@@ -44,7 +45,17 @@ public sealed class TransformSpeechEvent : CancellableEntityEventArgs, IInventor
 public sealed class CheckIgnoreSpeechBlockerEvent : EntityEventArgs
 {
     public EntityUid Sender;
+
+    /// <summary>
+    /// Skips every speech check for this message.
+    /// </summary>
     public bool IgnoreBlocker;
+
+    /// <summary>
+    /// Conditions forgiven for this message's speech check. Raised as the message is sent, so a handler may spend a
+    /// one-shot grant here.
+    /// </summary>
+    public MobCondition Ignoring;
 
     public CheckIgnoreSpeechBlockerEvent(EntityUid sender, bool ignoreBlocker)
     {
