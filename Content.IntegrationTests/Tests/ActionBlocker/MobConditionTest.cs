@@ -12,7 +12,6 @@ using Content.Shared.Interaction.Components;
 using Content.Shared.Inventory.VirtualItem;
 using Content.Shared.Mobs;
 using Content.Shared.Mobs.Systems;
-using Content.Shared.Paper;
 using Content.Shared.StatusEffectNew;
 using Content.Shared.Stunnable;
 using Robust.Shared.GameObjects;
@@ -21,8 +20,8 @@ using Robust.Shared.Localization;
 namespace Content.IntegrationTests.Tests.ActionBlocker;
 
 /// <summary>
-/// End-to-end tests for <see cref="MobCapabilitiesSystem"/> with its demo producers (mob state, stun, cuffs) and
-/// consumers (self-uncuff, paper read-only, the UI tiers). Every integration test also runs with
+/// End-to-end tests for <see cref="MobCapabilitiesSystem"/> with its demo producers (mob state, stun, cuffs, sleep,
+/// muting) and consumers (self-uncuff, speech, last words). Every integration test also runs with
 /// <c>debug.mob_conditions_verify</c> on, which logs an error whenever a producer forgets to refresh.
 /// </summary>
 [TestFixture]
@@ -31,7 +30,6 @@ public sealed class MobConditionTest : InteractionTest
 {
     private const string TestMob = "MobConditionTestMob";
     private const string TestCuffs = "MobConditionTestCuffs";
-    private const string PaperProto = "Paper";
     private const string MutedEffect = "StatusEffectMuted";
     private const string MimeMutedEffect = "StatusEffectMimeMuted";
 
@@ -151,18 +149,6 @@ public sealed class MobConditionTest : InteractionTest
     {
         await Server.WaitPost(() => _sMobState.ChangeMobState(SPlayer, state));
         await RunTicks(1);
-    }
-
-    private async Task OpenPaper()
-    {
-        await Activate();
-        Assert.That(IsUiOpen(PaperComponent.PaperUiKey.Key), Is.True, "Paper UI did not open.");
-    }
-
-    private async Task<string> Write(string text)
-    {
-        await SendBui(PaperComponent.PaperUiKey.Key, new PaperComponent.PaperInputTextMessage(text));
-        return Comp<PaperComponent>().Content;
     }
 
     [Test, Description("Restraint can be forgiven, but forgiving it doesn't forgive an independent cause.")]
@@ -530,22 +516,6 @@ public sealed class MobConditionTest : InteractionTest
         });
     }
 
-    [Test, Description("A cuffed user can open paper to read it, but writing is rejected by the server.")]
-    public async Task CuffedPaperReadOnly()
-    {
-        await SpawnTarget(PaperProto);
-        await Cuff();
-
-        await OpenPaper();
-        Assert.That(await Write("cuffed"), Is.Empty, "A cuffed user wrote on paper.");
-
-        await CloseBui(PaperComponent.PaperUiKey.Key);
-        await Uncuff();
-
-        await OpenPaper();
-        Assert.That(await Write("free"), Is.EqualTo("free"));
-    }
-
     [Test, Description("A self-uncuff forgives the restraint, but not a stun.")]
     public async Task SelfUncuff()
     {
@@ -570,29 +540,5 @@ public sealed class MobConditionTest : InteractionTest
             Assert.That(_sCapabilities.TryGetBlockedReason(SPlayer, MobCapability.Interact, out var reason, MobCondition.Restrained));
             Assert.That(reason, Is.EqualTo(Loc.GetString("mob-condition-blocked-incapacitated")));
         });
-    }
-
-    [Test, Description("A stun leaves an open window open but rejects its input until the stun ends.")]
-    public async Task StunKeepsWindowDisabled()
-    {
-        await SpawnTarget(PaperProto);
-        await OpenPaper();
-
-        await Stun(true);
-        Assert.That(IsUiOpen(PaperComponent.PaperUiKey.Key), Is.True, "Stun closed the window.");
-        Assert.That(await Write("stunned"), Is.Empty, "A stunned user wrote on paper.");
-
-        await Stun(false);
-        Assert.That(await Write("recovered"), Is.EqualTo("recovered"));
-    }
-
-    [Test, Description("Falling unconscious closes open windows.")]
-    public async Task CritClosesWindow()
-    {
-        await SpawnTarget(PaperProto);
-        await OpenPaper();
-
-        await SetMobState(MobState.Critical);
-        Assert.That(IsUiOpen(PaperComponent.PaperUiKey.Key), Is.False, "Going critical left the window open.");
     }
 }

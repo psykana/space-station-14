@@ -52,12 +52,6 @@ public sealed class AfterActivatableUIOpenEvent(EntityUid user) : EntityEventArg
     /// The player that opened the UI.
     /// </summary>
     public readonly EntityUid User = user;
-
-    /// <summary>
-    /// How much the player may do with it. Handlers with side effects beyond showing the UI must not apply them
-    /// unless this is <see cref="UiStatus.Interactive"/>.
-    /// </summary>
-    public UiStatus Status { get; init; } = UiStatus.Interactive;
 }
 
 /// <summary>
@@ -71,12 +65,6 @@ public sealed class BeforeActivatableUIOpenEvent(EntityUid user) : EntityEventAr
     /// The player that is opening the UI.
     /// </summary>
     public readonly EntityUid User = user;
-
-    /// <summary>
-    /// How much the player may do with it. Handlers with side effects beyond preparing the UI must not apply them
-    /// unless this is <see cref="UiStatus.Interactive"/>.
-    /// </summary>
-    public UiStatus Status { get; init; } = UiStatus.Interactive;
 }
 
 public sealed class ActivatableUIPlayerChangedEvent : EntityEventArgs

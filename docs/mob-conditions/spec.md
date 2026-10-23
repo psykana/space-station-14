@@ -101,7 +101,7 @@ event the bookkeeper still raises for it.
 | `Stand` | 11 | `StandAttemptEvent` (`Content.Shared.Standing`) |
 | `Pull` | 12 | `StartPullAttemptEvent` (`Content.Shared.Pulling.Events`; the file is under `Movement/Pulling/Events/`) |
 | `ChangeDirection` | 13 | `ChangeDirectionAttemptEvent` (`Content.Shared.Interaction.Events`) |
-| `UiAccess` | 14 | none; consumed by `GetUiStatus` (§8) |
+| `UiAccess` | 14 | none. Its consumer, `GetUiStatus` (§8), is deferred to a later phase; until then only the virtual-item and subfloor vetoes test it. |
 | `StandUp` | 15 | `StandUpAttemptEvent` (`Content.Shared.Stunnable`, by-ref) |
 | `Down` | 16 | `DownAttemptEvent` (`Content.Shared.Standing`). Not blocked by `Unconscious`: crit and death lie the mob down. |
 | `Complex` | 17 | none. A creature property (§15.4): the mob has `ComplexInteractionComponent`. No condition blocks it. |
@@ -192,6 +192,11 @@ It is named to avoid confusion with `ActionRequirementsComponent`/`ActionRequire
 called it `ActionRequirements`; that name MUST NOT be used.
 
 ### 2.6 UI types
+
+> **Deferred to a later phase.** The UI tiers are a refactor of their own. A first
+> implementation landed on `mob-conditions` (`8b64a50b6b`) and was reverted to keep this phase
+> to the bookkeeper. UIs behave as on master until then. This section is the design for that
+> phase.
 
 - **`UiStatus.cs`:**
   `public enum UiStatus : sbyte { Close = -1, Disabled = 0, ReadOnly = 1, Interactive = 2 }`.
@@ -687,6 +692,11 @@ On `ComponentInit`, if either was set to `false` in YAML, translate it into `Req
 
 ## 8. UI tiers
 
+> **Deferred to a later phase.** The UI tiers are a refactor of their own. A first
+> implementation landed on `mob-conditions` (`8b64a50b6b`) and was reverted to keep this phase
+> to the bookkeeper. UIs behave as on master until then. This section is the design for that
+> phase.
+
 ### 8.1 `ActivatableUISystem.GetUiStatus` — `ActivatableUISystem.Status.cs`
 
 ```csharp
@@ -1006,7 +1016,7 @@ for the condition-based case. Locale keys: `mob-condition-blocked-<member>`.
    - Ghost.
 
    Every commit deletes its handlers.
-3. **UI tiers.** §8 plus paper. This fixes cuffed reading and observer access.
+3. **UI tiers**, in a later phase. §8 plus paper. This fixes cuffed reading and observer access.
 4. **Action bar at parity.** §7.1–7.3.
 5. **Follow-ups, each separate:**
    - §6.3 producers.
@@ -1034,9 +1044,6 @@ A demo implements a vertical slice of the model, one commit per step.
 - the core (§2–5), including the §4.5 verify cvar, which is on in integration tests;
 - the MobState, Stun, Cuffs and Sleeping producers;
 - self-uncuff (§9.1);
-- the UI tiers and paper read-only (§8);
-- the close sweep: `GetUiStatus` returns `Close` for an unconscious user, and the sweep closes any
-  open UI whose status is `Close`;
 - failure reasons (§10.2) for self-uncuff and the activate key, through
   `CanPerform(..., out reason)`;
 - §15.5 step 1 (forwarding):
@@ -1054,8 +1061,9 @@ A demo implements a vertical slice of the model, one commit per step.
   ignore masks; speech popups from chat (§5.4).
 
 **Deliberately not implemented yet:**
-- **Spectators** keep today's access. `GetUiStatus` closes `RequiresComplex` UIs to ghosts until the §8.5 audit is done.
-- **`InHandsOnly`** is still checked at every tier (§11 Q8).
+- **The UI tiers (§8)**, paper read-only and the close sweep. They were implemented here, then
+  reverted: they are a refactor of their own, for a later phase. UIs, spectators included,
+  behave as on master.
 - **Not migrated:** the action-bar `Requires` (§7), the EntityCondition bridge (§10.1), and the Ghost, Knockdown and LegsParalyzed producers. The §6.3 sources aren't migrated either. Their attempt events work as before.
 
 ## 13. Tests
@@ -1101,12 +1109,12 @@ Two kinds of test:
 | `CacheConsistency` | With §4.5 on, run stun, cuff, sleep, crit and ghost transitions; no assert fires. |
 | `ClientPredictionMatchesServer` | After a predicted stun and after the server state arrives, the client's `IsBlocked` and `IsBlocked(…, Restrained)` match the server's (§2.3). |
 | `StationAiDoesNotUncancel` | An AI-held entity that something else has already cancelled stays cancelled (§5.1). |
-| `GhostReadOnly` | A non-admin ghost opens a `RequiresComplex` machine UI as `ReadOnly`; an input message is rejected server-side; `BlockSpectators` gives `Close`. An admin observing as an ordinary ghost also gets `ReadOnly`. |
-| `GhostNoSingleUserLock` | A ghost opens a `SingleUser` console; a crew member can still open and use it. |
-| `GhostOpenNoSideEffects` | A ghost opening a trigger-on-open entity fires no trigger, and opening a shuttle console adds no `PilotComponent` (§8.5). |
-| `CuffedPaperReadOnly` | A cuffed user activates paper and the UI opens; a write message is rejected; after uncuffing, the write succeeds. |
-| `StunKeepsWindowDisabled` | An open machine UI stays open while the user is stunned, and its input is rejected. After the stun it works again. |
-| `CritClosesWindow` | An open machine UI closes when the user goes crit; the borg laws UI (`requireInputValidation: false`) does not. |
+| `GhostReadOnly` | UI phase (§8). A non-admin ghost opens a `RequiresComplex` machine UI as `ReadOnly`; an input message is rejected server-side; `BlockSpectators` gives `Close`. An admin observing as an ordinary ghost also gets `ReadOnly`. |
+| `GhostNoSingleUserLock` | UI phase (§8). A ghost opens a `SingleUser` console; a crew member can still open and use it. |
+| `GhostOpenNoSideEffects` | UI phase (§8). A ghost opening a trigger-on-open entity fires no trigger, and opening a shuttle console adds no `PilotComponent` (§8.5). |
+| `CuffedPaperReadOnly` | UI phase (§8). A cuffed user activates paper and the UI opens; a write message is rejected; after uncuffing, the write succeeds. |
+| `StunKeepsWindowDisabled` | UI phase (§8). An open machine UI stays open while the user is stunned, and its input is rejected. After the stun it works again. |
+| `CritClosesWindow` | UI phase (§8). An open machine UI closes when the user goes crit; the borg laws UI (`requireInputValidation: false`) does not. |
 | `SelfUncuff` | A cuffed mob can start uncuffing itself, and `CanStillInteract` is never flipped (no extra `Dirty`). |
 | `VehicleReentrancy` | Stunning a vehicle operator stops vehicle movement in the same tick (R1). |
 | `ActionParity` | For each §7.2 row, an action with that `requires` validates in exactly the states it did with the old bools: awake, stunned, cuffed, crit. |
@@ -1462,6 +1470,9 @@ A design review of the demo. Changed:
   source (§2.4).
 - **`StatusEffectsSystem` marks an effect applied before announcing it**, so refreshes in the
   applied event see it.
+- **The UI tiers were reverted**, to a later phase of their own (§8). The bookkeeper changes
+  don't depend on them. The activate-key failure popup stays: it is interaction feedback, not a
+  tier.
 - **Sleeping became a producer.** The review found that Last Words, once a mask, failed for a
   mob asleep and in crit: crit doesn't wake a sleeper, and Sleeping still cancelled speech
   itself, which no mask can forgive. Declaring `Unconscious` fixes it, and removes Sleeping's

@@ -293,6 +293,9 @@ to an unconscious mind, which replaces the relay ordering that kept a dead mime 
 
 ## 5. UI status tiers
 
+> **A later phase.** This is a refactor of its own. It was prototyped on `mob-conditions` and
+> reverted, so the bookkeeper can land first. UIs behave as on master until then.
+
 ```csharp
 public enum UiStatus : sbyte { Close = -1, Disabled = 0, ReadOnly = 1, Interactive = 2 }
 ```

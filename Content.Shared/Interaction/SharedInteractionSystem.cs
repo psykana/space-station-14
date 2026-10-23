@@ -72,7 +72,6 @@ namespace Content.Shared.Interaction
         [Dependency] private SharedPlayerRateLimitManager _rateLimit = default!;
         [Dependency] private TagSystem _tagSystem = default!;
         [Dependency] private UseDelaySystem _useDelay = default!;
-        [Dependency] private ActivatableUISystem _activatableUI = default!;
         [Dependency] private MobCapabilitiesSystem _capabilities = default!;
 
         [Dependency] private EntityQuery<IgnoreUIRangeComponent> _ignoreUiRangeQuery = default!;
@@ -149,20 +148,20 @@ namespace Content.Shared.Interaction
         /// <summary>
         ///     Check that the user that is interacting with the BUI is capable of interacting and can access the entity.
         /// </summary>
-        /// <remarks>
-        ///     Opening needs <see cref="UiStatus.ReadOnly"/>; every other message needs <see cref="UiStatus.Interactive"/>.
-        ///     Read-only is enforced here, on the server, not by the client window.
-        /// </remarks>
         private void OnBoundInterfaceInteractAttempt(Entity<UserInterfaceComponent> ent, ref BoundUserInterfaceMessageAttempt ev)
         {
             _uiQuery.TryComp(ev.Target, out var aUiComp);
 
-            var status = _activatableUI.GetUiStatus(ev.Actor, (ev.Target, aUiComp), ev.UiKey);
-            var required = ev.Message is OpenBoundInterfaceMessage ? UiStatus.ReadOnly : UiStatus.Interactive;
-            if (status < required)
+            if (!_actionBlockerSystem.CanInteract(ev.Actor, ev.Target))
             {
-                ev.Cancel();
-                return;
+                // We permit ghosts to open uis unless explicitly blocked
+                if (ev.Message is not OpenBoundInterfaceMessage
+                    || !HasComp<GhostComponent>(ev.Actor)
+                    || aUiComp?.BlockSpectators == true)
+                {
+                    ev.Cancel();
+                    return;
+                }
             }
 
             var range = _ui.GetUiRange(ev.Target, ev.UiKey);
@@ -186,14 +185,14 @@ namespace Content.Shared.Interaction
             if (!aUiComp.Key.Equals(ev.UiKey))
                 return;
 
-            // A read-only viewer neither holds nor respects the single-user lock.
-            if (status == UiStatus.Interactive &&
-                aUiComp.SingleUser &&
-                aUiComp.CurrentSingleUser != null &&
-                aUiComp.CurrentSingleUser != ev.Actor)
+            if (aUiComp.SingleUser && aUiComp.CurrentSingleUser != null && aUiComp.CurrentSingleUser != ev.Actor)
             {
                 ev.Cancel();
+                return;
             }
+
+            if (aUiComp.RequiresComplex && !_actionBlockerSystem.CanComplexInteract(ev.Actor))
+                ev.Cancel();
         }
 
         private bool UiRangeCheck(Entity<TransformComponent?> user, Entity<TransformComponent?> target, float range)
@@ -1172,14 +1171,7 @@ namespace Content.Shared.Interaction
                 return false;
 
             if (checkCanInteract && !_actionBlockerSystem.CanInteract(user, used))
-            {
-                // A UI that forgives what is wrong with the user still opens, read-only. Open it directly rather
-                // than raising the activation event: its other handlers must not run for a blocked user.
-                if (checkAccess && (!InRangeUnobstructed(user, used) || !IsAccessible(user, used)))
-                    return false;
-
-                return _activatableUI.TryOpenReadOnly(user, used);
-            }
+                return false;
 
             if (checkAccess && !InRangeUnobstructed(user, used))
                 return false;

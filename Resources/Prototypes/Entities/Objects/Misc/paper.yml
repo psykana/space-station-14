@@ -82,7 +82,6 @@
   - type: ActivatableUI
     key: enum.PaperUiKey.Key
     requiresComplex: false
-    readOnlyConditions: Restrained # cuffed users can read but not write
   - type: UserInterface
     interfaces:
       enum.PaperUiKey.Key:
@@ -476,7 +475,6 @@
   - type: ActivatableUI
     key: enum.PaperUiKey.Key
     requiresComplex: false
-    readOnlyConditions: Restrained # cuffed users can read but not write
   - type: UserInterface
     interfaces:
       enum.PaperUiKey.Key:

@@ -17,7 +17,6 @@
     state: guardian_info
   - type: ActivatableUI
     key: enum.PaperUiKey.Key
-    readOnlyConditions: Restrained # cuffed users can read but not write
   - type: UserInterface
     interfaces:
       enum.PaperUiKey.Key:
