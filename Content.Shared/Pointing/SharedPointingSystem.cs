@@ -4,7 +4,7 @@ using System.Numerics;
 
 namespace Content.Shared.Pointing;
 
-public abstract class SharedPointingSystem : EntitySystem
+public abstract partial class SharedPointingSystem : EntitySystem
 {
     [Dependency] private MobCapabilitiesSystem _capabilities = default!;
 
