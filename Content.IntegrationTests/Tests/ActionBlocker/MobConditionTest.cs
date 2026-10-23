@@ -3,6 +3,7 @@ using Content.IntegrationTests.Fixtures.Attributes;
 using Content.IntegrationTests.Tests.Interaction;
 using Content.Server.Chat.Systems;
 using Content.Server.Cuffs;
+using Content.Shared.Bed.Sleep;
 using Content.Shared.ActionBlocker;
 using Content.Shared.Cuffs.Components;
 using System.Linq;
@@ -69,6 +70,7 @@ public sealed class MobConditionTest : InteractionTest
     [SidedDependency(Side.Server)] private readonly ChatSystem _sChat = default!;
     [SidedDependency(Side.Server)] private readonly CuffableSystem _sCuffable = default!;
     [SidedDependency(Side.Server)] private readonly MobStateSystem _sMobState = default!;
+    [SidedDependency(Side.Server)] private readonly SleepingSystem _sSleeping = default!;
     [SidedDependency(Side.Server)] private readonly SharedStunSystem _sStun = default!;
     [SidedDependency(Side.Server)] private readonly StatusEffectsSystem _sStatus = default!;
     [SidedDependency(Side.Client)] private readonly MobCapabilitiesSystem _cCapabilities = default!;
@@ -131,6 +133,18 @@ public sealed class MobConditionTest : InteractionTest
         var req = new InteractionRequirements { Required = MobCapability.Speak };
         Assert.That(_sCapabilities.CanPerform(SPlayer, req, null, null, out var reason), Is.False);
         return reason ?? string.Empty;
+    }
+
+    private async Task Sleep(bool asleep)
+    {
+        await Server.WaitPost(() =>
+        {
+            if (asleep)
+                Assert.That(_sSleeping.TrySleeping(SPlayer), "Failed to put the player to sleep.");
+            else
+                Assert.That(_sSleeping.TryWaking(SPlayer, force: true), "Failed to wake the player.");
+        });
+        await RunTicks(1);
     }
 
     private async Task SetMobState(MobState state)
@@ -352,6 +366,98 @@ public sealed class MobConditionTest : InteractionTest
         await RunSeconds(1.5f);
         await Server.WaitAssertion(() =>
             Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Silenced), "Not silenced after the mute started."));
+    }
+
+    [Test, Description("A sleeper is Unconscious; waking clears it and stands the mob up on the same tick.")]
+    public async Task SleepIsUnconsciousAndWakeStandsUp()
+    {
+        await Sleep(true);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Unconscious));
+                Assert.That(SCan(MobCapability.Speak), Is.False);
+                Assert.That(SCan(MobCapability.Emote), Is.False);
+                Assert.That(SCan(MobCapability.Point), Is.False);
+                Assert.That(SCan(MobCapability.Conscious), Is.False);
+                Assert.That(_sCapabilities.IsBlocked(SPlayer, MobCapability.StandUp), Is.True);
+                Assert.That(SEntMan.HasComponent<KnockedDownComponent>(SPlayer), "Falling asleep didn't knock the mob down.");
+            });
+        });
+
+        await Sleep(false);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.Multiple(() =>
+            {
+                Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Unconscious), Is.False);
+                Assert.That(SCan(MobCapability.Speak), Is.True);
+                Assert.That(SEntMan.HasComponent<StunnedComponent>(SPlayer), Is.False, "Waking didn't unstun the mob.");
+                Assert.That(SEntMan.HasComponent<KnockedDownComponent>(SPlayer), Is.False, "Waking didn't stand the mob up.");
+                Assert.That(_sCapabilities.CanMove(SPlayer), Is.True);
+            });
+        });
+    }
+
+    [Test, Description("Waking up while cuffed unblocks nothing the cuffs block.")]
+    public async Task WakeWhileCuffed()
+    {
+        await Cuff();
+        await Sleep(true);
+        await Sleep(false);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(_sCapabilities.HasCondition(SPlayer, MobCondition.Restrained));
+            Assert.That(SCan(MobCapability.Interact), Is.False);
+            Assert.That(_sCapabilities.CanPerform(SPlayer, ForgiveRestraint), Is.True);
+        });
+    }
+
+    [Test, Description("Last words work while asleep and crit, muted or not; force-say works there unmuted.")]
+    public async Task LastWordsWhileAsleepInCrit()
+    {
+        await Sleep(true);
+        await SetMobState(MobState.Critical);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(SEntMan.HasComponent<SleepingComponent>(SPlayer), "Going crit woke the mob.");
+
+            var forceSay = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = MobCondition.Unconscious };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, forceSay), Is.True, "A sleeping crit mob couldn't force-say.");
+        });
+
+        await Mute(MutedEffect, true);
+
+        await Server.WaitAssertion(() =>
+        {
+            var lastWords = new InteractionRequirements
+            {
+                Required = MobCapability.Speak,
+                Ignoring = MobCondition.Unconscious | MobCondition.Silenced,
+            };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, lastWords), Is.True, "A sleeping crit mob couldn't say last words.");
+        });
+    }
+
+    [Test, Description("The force-say on falling asleep goes through the same mask as crit's.")]
+    public async Task ForceSayOnFallingAsleep()
+    {
+        await Sleep(true);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(SCan(MobCapability.Speak), Is.False);
+
+            SEntMan.AddComponent<AllowNextCritSpeechComponent>(SPlayer).Timeout = STiming.CurTime + TimeSpan.FromMinutes(1);
+            _sChat.CheckIgnoreSpeechBlocker(SPlayer, false, out var ignoring);
+            var req = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = ignoring };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, req), Is.True, "The force-said line was blocked.");
+        });
     }
 
     [Test, Description("Stun blocks acting and moving, but not speaking or pointing.")]

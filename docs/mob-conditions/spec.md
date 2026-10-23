@@ -502,8 +502,8 @@ message, so the server can't tell it apart.
   carries an `Ignoring` mask next to its `IgnoreBlocker` bool.
 - `DamageForceSaySystem` answers on `AllowNextCritSpeechComponent` with `Unconscious`, and spends
   the grant there. A query never spends it, and the bookkeeper knows nothing about it.
-- Until Sleeping becomes a producer, its own `SpeakAttemptEvent` handler keeps its copy of the
-  token check, for the force-say on falling asleep.
+- Sleeping declares `Unconscious` too (§6.2), so the force-say on falling asleep goes through
+  the same mask. Its own copy of the token check is gone.
 
 This was misnamed "last words" before. It is not the Last Words action.
 
@@ -511,7 +511,7 @@ This was misnamed "last words" before. It is not the Last Words action.
 `ignoring: Unconscious | Silenced`, through `TrySendInGameICMessage`, which now takes a mask.
 - It forgives being crit and, deliberately, being muted.
 - Everything else still applies: a speechless creature, an admin mute (§16.3), and unmigrated
-  attempt events.
+  attempt events. Being asleep is `Unconscious`, so a sleeping crit mob can still say them.
 - It used to skip every check with `ignoreActionBlocker: true`.
 
 **Popups are shown by chat, at send time.** When a message is blocked, chat pops the reason from
@@ -563,7 +563,7 @@ unconscious mind gets no feedback.
 | **MobState**: `Mobs/Systems/MobStateSystem.Subscribers.cs` | `Unconscious` (Critical, Dead) | `CheckAct` subscriptions `:33–43` (11 events); `CheckConcious` `:63` (Conscious); `OnSpeakAttempt` `:166` (§5.4) | state entered (`:103` — replace `_blocker.UpdateCanMove` with `_conditions.Refresh`; `_blocker` then leaves `MobStateSystem.cs`) | `Down()` `:55`, equip/unequip/unbuckle self-checks, `OnIncapCuffCheck` `:226` (until §11 Q3) |
 | **Stun**: `Stunnable/SharedStunSystem.cs` | `Incapacitated \| Immobilized` (`StunnedComponent` present) | `:51–58` (8 events): `OnAttempt` `:391`, `OnMoveAttempt` `:383`, `OnAttemptInteract` `:76` | `StunnedComponent` startup/shutdown; the existing `UpdateCanMove` calls become `Refresh` | equip/unequip `:59–60`, the KnockdownStatusEffect relay `:69` |
 | **Knockdown**: `Stunnable/SharedStunSystem.Knockdown.cs` | `Floored` (`KnockedDownComponent`) | `OnStandAttempt` `:575` (sub `:54`) | knockdown init; shutdown *before* standing | its own `StandUpAttemptEvent` raise `:346` |
-| **Sleeping**: `Bed/Sleep/SleepingSystem.cs` | `Unconscious` (`SleepingComponent`) | `:66` Speak, `:68` Point, `:70` Conscious, `:75` StandUp, `:80` Emote (handlers `:166/183/193/203/368`) | **`ComponentInit` and `ComponentRemove`**, which are the hooks this system already uses (`OnCompInit` `:148`, `OnComponentRemoved` `:156`), not startup/shutdown. In `OnComponentRemoved`, `Refresh` MUST run before `SleepStateChangedEvent` is raised (`:160`), because that event's handler calls `TryUnstun` and `TryStanding` (`:142–143`). | `OnSeeAttempt`, `OnUnbuckleAttempt`, `StunEndAttemptEvent`, `OnIncapCuffCheck` `:210` |
+| **Sleeping** (**done**): `Bed/Sleep/SleepingSystem.cs` | `Unconscious` (`SleepingComponent`) | `:66` Speak, `:68` Point, `:70` Conscious, `:75` StandUp, `:80` Emote (handlers `:166/183/193/203/368`) | **`ComponentInit` and `ComponentRemove`**, which are the hooks this system already uses (`OnCompInit` `:148`, `OnComponentRemoved` `:156`), not startup/shutdown. In `OnComponentRemoved`, `Refresh` MUST run before `SleepStateChangedEvent` is raised (`:160`), because that event's handler calls `TryUnstun` and `TryStanding` (`:142–143`). | `OnSeeAttempt`, `OnUnbuckleAttempt`, `StunEndAttemptEvent`, `OnIncapCuffCheck` `:210` |
 | **Cuffs**: `Cuffs/SharedCuffableSystem.cs` | `Restrained` (`!CanStillInteract`) | `:83–86` `CheckAct`, `:87` `CheckInteract` `:95` | `UpdateCuffState`: replace the `_actionBlocker.UpdateCanMove` at `:183`. It already runs before `CuffedStateChangeEvent`. Make `CanStillInteract` writable only from here (§6.1.5). | `HandleMoveAttempt` `:73/238` (only while pulled), `HandleStopPull` `:246`, the `CheckAct` method (still used by equip handlers); self-uncuff → §9.1 |
 | **Ghost**: `Ghost/Systems/SharedGhostSystem.cs` (namespace `Content.Shared.Ghost.Systems`) | `Incorporeal` (`!CanGhostInteract`) | `:32–36`: `OnAttempt` `:56`, `OnAttemptInteract` `:50` | `SetCanGhostInteract` (`:114`); server `GhostSystem.OnGhostStartup` calls a protected `EnsureGhostConditions` | everything else. MUST NOT add a `GhostComponent, ComponentStartup` subscription in shared: client and server already subscribe it, and the duplicate crashes at init. `CanGhostInteract` is a YAML `canInteract` field (`admin_ghost.yml:25`), so restrict runtime writes to the setter. |
 | **LegsParalyzed**: `Traits/Assorted/LegsParalyzedSystem.cs` | `Immobilized` | `:21/45` | startup, shutdown | buckle and throw handlers |
@@ -1032,7 +1032,7 @@ A demo implements a vertical slice of the model, one commit per step.
 
 **Implemented:**
 - the core (§2–5), including the §4.5 verify cvar, which is on in integration tests;
-- the MobState, Stun and Cuffs producers;
+- the MobState, Stun, Cuffs and Sleeping producers;
 - self-uncuff (§9.1);
 - the UI tiers and paper read-only (§8);
 - the close sweep: `GetUiStatus` returns `Close` for an unconscious user, and the sweep closes any
@@ -1056,7 +1056,7 @@ A demo implements a vertical slice of the model, one commit per step.
 **Deliberately not implemented yet:**
 - **Spectators** keep today's access. `GetUiStatus` closes `RequiresComplex` UIs to ghosts until the §8.5 audit is done.
 - **`InHandsOnly`** is still checked at every tier (§11 Q8).
-- **Not migrated:** the action-bar `Requires` (§7), the EntityCondition bridge (§10.1), and the Ghost, Knockdown, Sleeping and LegsParalyzed producers. The §6.3 sources aren't migrated either. Their attempt events work as before.
+- **Not migrated:** the action-bar `Requires` (§7), the EntityCondition bridge (§10.1), and the Ghost, Knockdown and LegsParalyzed producers. The §6.3 sources aren't migrated either. Their attempt events work as before.
 
 ## 13. Tests
 
@@ -1084,7 +1084,9 @@ Two kinds of test:
 |---|---|
 | `RestraintIsForgivable` | Cuffed: `CanInteract` false; with `Ignoring = Restrained`, true. Cuffed and asleep: still false with the ignore. |
 | `WakeWhileCuffed` | Cuff, sleep, wake: `Restrained` persists and interaction stays blocked. |
-| `WakeStandsUp` | Sleep, then wake. The mob stands up on the wake tick, which proves `Refresh` ran before `TryStanding` (§6.2). |
+| `WakeStandsUp` | Sleep, then wake. The mob stands up on the wake tick, which proves `Refresh` ran before `TryStanding` (§6.2). Implemented as `SleepIsUnconsciousAndWakeStandsUp`, which also checks what sleep blocks. |
+| `LastWordsWhileAsleepInCrit` | Asleep, then crit: force-say's mask passes, and with a mute added, last words' mask passes (§5.4). |
+| `ForceSayOnFallingAsleep` | Asleep with the force-say grant: chat's hook forgives `Unconscious` and Speak passes. |
 | `FlooredStillAllowsStandingUp` | Knocked down: `Stand` blocked, `StandUp` not blocked, and the mob recovers after the knockdown time. |
 | `ReviveAfterCritKnockdownStandsUp` | Knock down, crit, revive: the mob recovers and stands (§3.2 delta). |
 | `UnconsciousBlocksEverything` | Crit: every §2.2 capability but `Down` and `Complex` is blocked (through the cascade). A query neither honours nor spends the force-say grant. |
@@ -1332,7 +1334,7 @@ Buckets are those of §15.1, plus **N** (not a gate, §15.7). "Done" means migra
 | `SharedStunSystem`, `StunnedComponent` (`Stunnable/SharedStunSystem.cs`) | ChangeDirection, Move, Interaction, Use, Throw, Drop, Attack, Pickup | `Incapacitated \| Immobilized` | **Done.** The self equip/unequip checks move to `Equip`. |
 | `SharedStunSystem.Knockdown`, `KnockedDownComponent` | Stand | `Floored` | |
 | `SharedStunSystem`, `KnockdownStatusEffectComponent` relay (`:69/371`) | StandUp | `Pinned` | Needs the Q1 status-effect relay of `RefreshMobConditionsEvent`. |
-| `SleepingSystem` (`Bed/Sleep/SleepingSystem.cs`) | Speak, Point, Conscious, StandUp, Emote | `Unconscious` | Refresh before `SleepStateChangedEvent` (§6.2). The self-unbuckle check becomes a buckle consumer. |
+| `SleepingSystem` (`Bed/Sleep/SleepingSystem.cs`) | Speak, Point, Conscious, StandUp, Emote | `Unconscious` | **Done.** Refresh before `SleepStateChangedEvent` (§6.2). The self-unbuckle check becomes a buckle consumer. |
 | `SharedCuffableSystem` (`Cuffs/SharedCuffableSystem.cs`) | Drop, Pickup, Attack, Use, Interaction | `Restrained` | **Done.** |
 | `SharedCuffableSystem.HandleMoveAttempt` (`:259`) | Move, while restrained *and* pulled | `Immobilized`, while restrained and pulled | `OnPull` already fires on pull start and stop; it becomes `Refresh`. |
 | `SharedGhostSystem` (`Ghost/Systems/SharedGhostSystem.cs`) | Use, Emote, Drop, Pickup, Interaction | `Incorporeal` | |
@@ -1460,6 +1462,10 @@ A design review of the demo. Changed:
   source (§2.4).
 - **`StatusEffectsSystem` marks an effect applied before announcing it**, so refreshes in the
   applied event see it.
+- **Sleeping became a producer.** The review found that Last Words, once a mask, failed for a
+  mob asleep and in crit: crit doesn't wake a sleeper, and Sleeping still cancelled speech
+  itself, which no mask can forgive. Declaring `Unconscious` fixes it, and removes Sleeping's
+  copy of the force-say token check.
 
 Decided:
 - **The cache stays (approach A).** Checking live on every query was considered. It is safer
