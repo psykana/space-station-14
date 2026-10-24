@@ -27,13 +27,6 @@ public sealed partial class MobCapabilitiesSystem
     [Dependency] private EntityQuery<InputMoverComponent> _moverQuery = default!;
 
     /// <summary>
-    /// Extra context some legacy attempt events carry. Goes away with those events.
-    /// </summary>
-    private readonly record struct LegacyArgs(
-        Entity<MeleeWeaponComponent>? Weapon = null,
-        bool Disarm = false);
-
-    /// <summary>
     /// Whether <paramref name="user"/> has every capability in <see cref="InteractionRequirements.Required"/>, on
     /// <paramref name="target"/> and with <paramref name="used"/> if given.
     /// </summary>
@@ -56,17 +49,16 @@ public sealed partial class MobCapabilitiesSystem
         return Perform(user, req, target, used, default, out reason);
     }
 
-    /// <summary>
-    /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/> for
-    /// <see cref="MobCapability.Attack"/>, with the weapon and the disarm flag.
-    /// </summary>
-    public bool CanAttack(EntityUid user,
-        EntityUid? target = null,
-        Entity<MeleeWeaponComponent>? weapon = null,
-        bool disarm = false)
+    /// <inheritdoc cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?, out string?)"/>
+    /// <param name="payload">Per-capability data the rules need, such as the weapon for an attack.</param>
+    public bool CanPerform(EntityUid user,
+        in InteractionRequirements req,
+        EntityUid? target,
+        EntityUid? used,
+        in MobActionPayload payload,
+        out string? reason)
     {
-        var req = new InteractionRequirements { Required = MobCapability.Attack };
-        return Perform(user, req, target, weapon?.Owner, new LegacyArgs(Weapon: weapon, Disarm: disarm), out _);
+        return Perform(user, req, target, used, payload, out reason);
     }
 
     /// <summary>
@@ -129,7 +121,7 @@ public sealed partial class MobCapabilitiesSystem
         if (ev.Cancelled)
             return false;
 
-        if (!CheckRules(uid, req.Required, null, null, out _))
+        if (!CheckRules(uid, req.Required, null, null, default, out _))
         {
             ev.Cancelled = true;
             return false;
@@ -142,10 +134,10 @@ public sealed partial class MobCapabilitiesSystem
         in InteractionRequirements req,
         EntityUid? target,
         EntityUid? used,
-        LegacyArgs legacy,
+        in MobActionPayload payload,
         out string? reason)
     {
-        if (Check(user, req, target, used, legacy, out reason))
+        if (Check(user, req, target, used, payload, out reason))
             return true;
 
         // An unconscious mind gets no feedback, whichever step failed (RSN-7).
@@ -159,7 +151,7 @@ public sealed partial class MobCapabilitiesSystem
         in InteractionRequirements req,
         EntityUid? target,
         EntityUid? used,
-        LegacyArgs legacy,
+        in MobActionPayload payload,
         out string? reason)
     {
         reason = null;
@@ -175,10 +167,10 @@ public sealed partial class MobCapabilitiesSystem
             return false;
 
         // Sources that haven't migrated yet still cancel their attempt events.
-        if (!RaiseLegacyAttempts(user, req.Required, target, used, legacy))
+        if (!RaiseLegacyAttempts(user, req.Required, target, used, payload))
             return false;
 
-        return CheckRules(user, req.Required, target, used, out reason);
+        return CheckRules(user, req.Required, target, used, payload, out reason);
     }
 
     /// <summary>
@@ -236,11 +228,16 @@ public sealed partial class MobCapabilitiesSystem
     /// <summary>
     /// Rules about this user and target, then things that can't be acted on at all.
     /// </summary>
-    private bool CheckRules(EntityUid user, MobCapability required, EntityUid? target, EntityUid? used, out string? reason)
+    private bool CheckRules(EntityUid user,
+        MobCapability required,
+        EntityUid? target,
+        EntityUid? used,
+        in MobActionPayload payload,
+        out string? reason)
     {
         reason = null;
 
-        var ev = new MobActionAttemptEvent(user, required, target, used);
+        var ev = new MobActionAttemptEvent(user, required, target, used, payload);
         RaiseLocalEvent(user, ref ev);
         if (ev.Cancelled)
         {
@@ -248,11 +245,11 @@ public sealed partial class MobCapabilitiesSystem
             return false;
         }
 
-        if (target != null && target != user && !TargetAllows(user, required, target.Value, used, out reason))
+        if (target != null && target != user && !TargetAllows(user, required, target.Value, used, payload, out reason))
             return false;
 
         if (used != null && (required & (MobCapability.UseHeld | MobCapability.Throw)) != 0 &&
-            !TargetAllows(user, required, used.Value, used, out reason))
+            !TargetAllows(user, required, used.Value, used, payload, out reason))
         {
             return false;
         }
@@ -260,9 +257,14 @@ public sealed partial class MobCapabilitiesSystem
         return true;
     }
 
-    private bool TargetAllows(EntityUid user, MobCapability required, EntityUid target, EntityUid? used, out string? reason)
+    private bool TargetAllows(EntityUid user,
+        MobCapability required,
+        EntityUid target,
+        EntityUid? used,
+        in MobActionPayload payload,
+        out string? reason)
     {
-        var ev = new MobActionTargetAttemptEvent(user, required, used);
+        var ev = new MobActionTargetAttemptEvent(user, required, used, payload);
         RaiseLocalEvent(target, ref ev);
         reason = ev.Reason;
         return !ev.Cancelled;
@@ -270,13 +272,10 @@ public sealed partial class MobCapabilitiesSystem
 
     /// <summary>
     /// Raises the typed attempt events that <see cref="ActionBlockerSystem"/> used to raise, once for each required
-    /// capability that has one. Each one is deleted once its last subscriber has moved to conditions, rules or
-    /// properties (spec §16).
+    /// capability that has one. Each goes once its last subscriber has moved to a source, rule or capability.
     /// </summary>
-    // The obsolete target events have no upstream subscribers left, but downstream code may still subscribe to them
-    // until they are removed.
 #pragma warning disable CS0618
-    private bool RaiseLegacyAttempts(EntityUid user, MobCapability required, EntityUid? target, EntityUid? used, LegacyArgs legacy)
+    private bool RaiseLegacyAttempts(EntityUid user, MobCapability required, EntityUid? target, EntityUid? used, in MobActionPayload payload)
     {
         // The interaction check includes the consciousness check.
         if ((required & MobCapability.Interact) != 0)
@@ -336,7 +335,7 @@ public sealed partial class MobCapabilitiesSystem
                 return false;
         }
 
-        if ((required & MobCapability.Attack) != 0 && !RaiseAttackAttempts(user, target, legacy))
+        if ((required & MobCapability.Attack) != 0 && !RaiseAttackAttempts(user, target, payload))
             return false;
 
         if ((required & MobCapability.Throw) != 0 && used != null)
@@ -434,7 +433,7 @@ public sealed partial class MobCapabilitiesSystem
     }
 
 #pragma warning disable CS0618
-    private bool RaiseAttackAttempts(EntityUid user, EntityUid? target, LegacyArgs legacy)
+    private bool RaiseAttackAttempts(EntityUid user, EntityUid? target, in MobActionPayload payload)
     {
         // If target is in a container can we attack
         if (target != null && _container.IsEntityInContainer(target.Value))
@@ -451,7 +450,7 @@ public sealed partial class MobCapabilitiesSystem
                 return false;
         }
 
-        var ev = new AttackAttemptEvent(user, target, legacy.Weapon, legacy.Disarm);
+        var ev = new AttackAttemptEvent(user, target, payload.Weapon, payload.Disarm);
         RaiseLocalEvent(user, ev);
         if (ev.Cancelled)
             return false;
@@ -459,7 +458,7 @@ public sealed partial class MobCapabilitiesSystem
         if (target == null)
             return true;
 
-        var targetEv = new GettingAttackedAttemptEvent(user, legacy.Weapon, legacy.Disarm);
+        var targetEv = new GettingAttackedAttemptEvent(user, payload.Weapon, payload.Disarm);
         RaiseLocalEvent(target.Value, ref targetEv);
         return !targetEv.Cancelled;
     }

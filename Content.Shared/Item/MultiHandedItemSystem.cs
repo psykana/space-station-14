@@ -41,10 +41,9 @@ public sealed partial class MultiHandedItemSystem : EntitySystem
         if ((args.Required & MobCapability.Pickup) == 0 || _hands.CountFreeHands(args.User) >= ent.Comp.HandsNeeded)
             return;
 
-        args.Cancelled = true;
-        args.Reason = Loc.GetString("multi-handed-item-pick-up-fail",
+        args.Cancel(Loc.GetString("multi-handed-item-pick-up-fail",
             ("number", ent.Comp.HandsNeeded - 1),
-            ("item", ent.Owner));
+            ("item", ent.Owner)));
     }
 
     private void OnVirtualItemDeleted(Entity<MultiHandedItemComponent> ent, ref VirtualItemDeletedEvent args)

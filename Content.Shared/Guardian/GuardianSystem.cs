@@ -161,7 +161,7 @@ public sealed partial class GuardianSystem : EntitySystem
             guardian.LastAttackPopupTime = _timing.CurTime;
         }
 
-        args.Args.Cancelled = true;
+        args.Args.Cancel();
     }
 
     [SubscribeLocalEvent]

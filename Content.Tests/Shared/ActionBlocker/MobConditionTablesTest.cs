@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Content.Shared.ActionBlocker;
 using NUnit.Framework;
+using Robust.Shared.GameObjects;
 
 namespace Content.Tests.Shared.ActionBlocker;
 
@@ -139,5 +140,17 @@ public sealed class MobConditionTablesTest
 
         Assert.That(MobCapabilitiesSystem.GetBlocked(MobCapabilitiesSystem.Expand(everything)).HasFlag(MobCapability.Complex),
             Is.False, "Complex is a creature property; no condition may block it.");
+    }
+
+    [Test]
+    public void RuleEventsKeepTheFirstReason()
+    {
+        var ev = new MobActionTargetAttemptEvent(EntityUid.Invalid, MobCapability.Interact, null, default);
+        ev.Cancel();
+        ev.Cancel("first");
+        ev.Cancel("second");
+
+        Assert.That(ev.Cancelled);
+        Assert.That(ev.Reason, Is.EqualTo("first"), "A later handler overwrote the reason.");
     }
 }

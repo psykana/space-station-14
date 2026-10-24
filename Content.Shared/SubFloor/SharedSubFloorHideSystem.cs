@@ -81,13 +81,13 @@ namespace Content.Shared.SubFloor
                 return;
 
             if ((args.Required & MobCapability.Attack) != 0)
-                args.Cancelled = true;
+                args.Cancel();
 
             // Allow admins (e.g., mappers/aghosts) to twiddle with stuff under subfloors
             if ((args.Required & MobCapability.Interact) != 0 &&
                 !HasComp<BypassInteractionChecksComponent>(args.User))
             {
-                args.Cancelled = true;
+                args.Cancel();
             }
         }
 

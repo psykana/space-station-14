@@ -109,7 +109,8 @@ namespace Content.Shared.ActionBlocker
 
         public bool CanAttack(EntityUid uid, EntityUid? target = null, Entity<MeleeWeaponComponent>? weapon = null, bool disarm = false)
         {
-            return _capabilities.CanAttack(uid, target, weapon, disarm);
+            var req = new InteractionRequirements { Required = MobCapability.Attack };
+            return _capabilities.CanPerform(uid, req, target, weapon?.Owner, new MobActionPayload(weapon, disarm), out _);
         }
 
         public bool CanChangeDirection(EntityUid uid)

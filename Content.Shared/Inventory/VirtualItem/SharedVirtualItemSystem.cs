@@ -78,7 +78,7 @@ public abstract partial class SharedVirtualItemSystem : EntitySystem
     {
         // No interactions with a virtual item, please.
         if ((args.Required & MobCapability.Interact) != 0)
-            args.Cancelled = true;
+            args.Cancel();
     }
 
     private void OnGetUsedEntity(Entity<VirtualItemComponent> ent, ref GetUsedEntityEvent args)
