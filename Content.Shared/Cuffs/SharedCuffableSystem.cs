@@ -129,9 +129,10 @@ namespace Content.Shared.Cuffs
             if (!_capabilities.CanPerform(args.User, req, args.Target, null, out var reason))
             {
                 args.Cancelled = true;
-                _popup.PopupEntity(reason ?? Loc.GetString("cuffable-component-cannot-interact-message"),
-                    args.Target,
-                    args.User);
+
+                // No reason means nothing to say, as for an unconscious mob (CON-6).
+                if (reason != null)
+                    _popup.PopupEntity(reason, args.Target, args.User);
             }
         }
 
