@@ -116,13 +116,13 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     }
 
     /// <summary>
-    /// The conditions in effect when a caller forgives <paramref name="ignoring"/>. The mask is applied before the
-    /// cascade, so forgiving a declared condition forgives what it alone implies, and again after it, so forgiving a
-    /// derived condition works too. An independent cause of the same action is never forgiven.
+    /// The conditions in effect when a caller forgives <paramref name="ignoring"/>. A mask forgives declared
+    /// conditions only, so it is applied before the cascade and never after it: forgiving a declared condition
+    /// forgives what it alone implies, and a condition that another declared one implies stays (IGN-1, IGN-5).
     /// </summary>
     public static MobCondition Effective(MobCondition declared, MobCondition ignoring)
     {
-        return Expand(declared & ~ignoring) & ~ignoring;
+        return Expand(declared & ~ignoring);
     }
 
     /// <summary>

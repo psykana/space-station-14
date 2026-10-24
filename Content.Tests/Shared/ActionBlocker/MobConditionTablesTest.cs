@@ -73,14 +73,49 @@ public sealed class MobConditionTablesTest
     [Test]
     public void IgnoringDerivedBit()
     {
+        // A mask forgives declared conditions only: Restrained re-derives the HandsBlocked it names.
         var cuffed = MobCapabilitiesSystem.Effective(MobCondition.Restrained, MobCondition.HandsBlocked);
-        Assert.That(MobCapabilitiesSystem.GetBlocked(cuffed) & MobCapability.Interact, Is.EqualTo(MobCapability.None),
-            "Forgiving a derived condition must work even though Restrained re-derives it.");
+        Assert.That(MobCapabilitiesSystem.GetBlocked(cuffed).HasFlag(MobCapability.Interact),
+            "Ignoring a derived condition must not forgive the condition that derives it.");
+    }
 
-        var cuffedAndOut = MobCapabilitiesSystem.Effective(MobCondition.Restrained | MobCondition.Unconscious,
-            MobCondition.HandsBlocked);
-        Assert.That(MobCapabilitiesSystem.GetBlocked(cuffedAndOut).HasFlag(MobCapability.Interact),
-            "Incapacitated still blocks interaction.");
+    [Test]
+    public void IgnoringStunKeepsCuffsAndCrit()
+    {
+        const MobCondition stun = MobCondition.Incapacitated | MobCondition.Immobilized;
+
+        var stunned = MobCapabilitiesSystem.Effective(stun, MobCondition.Incapacitated);
+        Assert.That(MobCapabilitiesSystem.GetBlocked(stunned).HasFlag(MobCapability.UseHeld), Is.False,
+            "Ignoring the stun must forgive it when nothing else blocks hands.");
+
+        var stunnedAndCuffed = MobCapabilitiesSystem.Effective(stun | MobCondition.Restrained, MobCondition.Incapacitated);
+        Assert.That(MobCapabilitiesSystem.GetBlocked(stunnedAndCuffed).HasFlag(MobCapability.UseHeld),
+            "Ignoring the stun must not forgive the cuffs.");
+
+        var stunnedAndCrit = MobCapabilitiesSystem.Effective(stun | MobCondition.Unconscious, MobCondition.Incapacitated);
+        Assert.That(MobCapabilitiesSystem.GetBlocked(stunnedAndCrit).HasFlag(MobCapability.UseHeld),
+            "Ignoring the stun must not forgive being crit.");
+    }
+
+    [Test]
+    public void UnconsciousIsForgivenOnlyByName()
+    {
+        var unconscious = MobCapabilitiesSystem.GetBlocked(MobCapabilitiesSystem.Expand(MobCondition.Unconscious));
+        var bits = AllConditions.Where(c => c != MobCondition.Unconscious).ToArray();
+
+        // Every mask built from the other members.
+        for (var subset = 0; subset < 1 << bits.Length; subset++)
+        {
+            var mask = MobCondition.None;
+            for (var i = 0; i < bits.Length; i++)
+            {
+                if ((subset & (1 << i)) != 0)
+                    mask |= bits[i];
+            }
+
+            var blocked = MobCapabilitiesSystem.GetBlocked(MobCapabilitiesSystem.Effective(MobCondition.Unconscious, mask));
+            Assert.That(blocked, Is.EqualTo(unconscious), $"Ignoring {mask} partly forgave unconsciousness.");
+        }
     }
 
     [Test]
