@@ -5,7 +5,7 @@ This file tracks the work left between the code on branch `mob-conditions` and t
 rationale.
 
 Conventions:
-- Status lives here only. `[x]` means done in the code at `66df885e0c`; `[ ]` means not done.
+- Status lives here only. `[x]` means done on the branch; `[ ]` means not done.
 - Items cite the spec rule they implement, such as `IGN-1`.
 - Where a count would rot, the plan gives the `git grep` that produces it.
 
@@ -47,39 +47,40 @@ pieces, and each piece plans its own compatibility then.
 
 ### 1.2 Core changes
 
-- [ ] Rename `MobConditionsComponent` to `MobCapabilitiesComponent`: class, file, YAML type
+- [x] Rename `MobConditionsComponent` to `MobCapabilitiesComponent`: class, file, YAML type
   `MobCapabilities` on `MobDamageable` in `Mobs/base.yml`, and the test prototypes (CMP-4, PRES-3).
-- [ ] Masks forgive declared conditions only: `Effective = Expand(declared & ~ignoring)` (IGN-1). Update
+- [x] Masks forgive declared conditions only: `Effective = Expand(declared & ~ignoring)` (IGN-1). Update
   the table tests (§8).
-- [ ] `CanPerform` checks capabilities before conditions. Today `CheckSelf` checks conditions first,
+- [x] `CanPerform` checks capabilities before conditions. Today `CheckSelf` checks conditions first,
   and a missing `Complex` gives no reason. Add `mob-capability-lacking-<member>` (CP-1, RSN-6).
-- [ ] `CanPerform` returns no reason while the user is still `Unconscious` after the mask. Then delete
+- [x] `CanPerform` returns no reason while the user is still `Unconscious` after the mask. Then delete
   chat's own check in `ChatSystem.CanSpeak` (RSN-7). This also silences the activate key while
   unconscious (CON-4).
-- [ ] The bookkeeper never shows popups: delete `MobCapabilitiesSystem.CanPickup` and its
+- [x] The bookkeeper never shows popups: delete `MobCapabilitiesSystem.CanPickup` and its
   `showPopup` path (CON-2).
-- [ ] `SharedHandsSystem.TryPickup` and `TryPickupAnyHand` take `showPopup = false`; the player paths
+- [x] `SharedHandsSystem.TryPickup` and `TryPickupAnyHand` take `showPopup = false`; the player paths
   pass true; `CanPickupToHand` shows the reason when asked (CON-3).
 - [ ] Popups leave the rule handlers for their consumers: the guardian's throttled popup
   (`GuardianSystem.OnGuardianAttackAttempt`, `OnPilotAttackAttempt`), pacification's
   (`PacificationSystem.OnAttackAttempt`), and Worm's stand-up message, which becomes `Pinned`'s reason
   (RL-4). Each lands with its row in §3.
-- [ ] Self-uncuff (`SharedCuffableSystem.OnUncuffAttempt`) drops its fallback text
-  `cuffable-component-cannot-interact-message`, so a null reason shows nothing, and uses a predicted
-  popup (CON-5, CON-6).
-- [ ] Rule events get `Cancelled { get; private set; }` and `Cancel(string? reason)`, keeping the first
+- [x] Self-uncuff (`SharedCuffableSystem.OnUncuffAttempt`) drops its fallback text
+  `cuffable-component-cannot-interact-message`, so a null reason shows nothing, and shows the reason
+  to the user only (CON-5, CON-6).
+- [x] Rule events get `Cancelled { get; private set; }` and `Cancel(string? reason)`, keeping the first
   non-null reason (EVT-2, RL-1, RSN-8).
-- [ ] Add `MobActionPayload` (weapon, disarm), the payload overload of `CanPerform`, and pass it to
+- [x] Add `MobActionPayload` (weapon, disarm), the payload overload of `CanPerform`, and pass it to
   both rule events. Delete `MobCapabilitiesSystem.CanAttack` and `LegacyArgs` (RL-7, CP-3).
-- [ ] `OnHandleState` raises `MobConditionsChangedEvent` when the derived `Conditions` change. Today it
+- [x] `OnHandleState` raises `MobConditionsChangedEvent` when the derived `Conditions` change. Today it
   only updates movement (EV-2).
-- [ ] The cache check also covers `HasCondition` (CC-1).
-- [ ] `InteractionRequirements` presets (REQ-3). Audit zero-valued uses with
+- [x] The cache check also covers `HasCondition` (CC-1).
+- [x] `InteractionRequirements` presets (REQ-3). Audit zero-valued uses with
   `git grep -nE "default\(InteractionRequirements\)|InteractionRequirements [A-Za-z_]+;" -- '*.cs'` (REQ-2).
-- [ ] Locale: add `mob-condition-name-pullblocked`, which is missing, and each new member's keys as
-  it lands (RSN-9).
+- [x] Locale: add `mob-condition-name-pullblocked`.
+- [ ] Each new member's locale keys, as it lands (RSN-9).
 - [ ] Prototype test: no YAML mask names `PullBlocked` or `AdminMuted` (IGN-9), and no `Required`
-  names `Move` (REQ-4).
+  names `Move` (REQ-4). Nothing in YAML carries requirements until the action bar's `Requires` (§5),
+  so this lands with it.
 - [ ] The entity-condition bridge: `MobConditionEntityConditionSystem`, `HasMobConditionCondition`,
   `MobCapabilitiesSystem.GetLocalizedName` and the guidebook key (spec §9.3).
 - [ ] With the first item or implant source: relay `RefreshMobConditionsEvent` and
@@ -438,9 +439,9 @@ Pure-table tests are plain NUnit tests against the static functions, in
 | INV-6 | `RestraintIsForgivable` (table): forgiving `Restrained` unblocks `Interact` | table | [x]; [ ] assert that `Restrained` alone blocks nothing |
 | INV-7 | `ReviveAfterCritKnockdownStandsUp` | integration | [ ] |
 | IGN-4 | `RestraintIsForgivable` (table and integration; the integration case uses cuffed and crit) | both | [x] |
-| IGN-5 | `IgnoringDerivedBit`: invert it, so `Effective(Restrained, HandsBlocked)` still blocks `Interact` | table | [ ] |
-| IGN-5 | `IgnoringStunKeepsCuffsAndCrit`: needs a hand, ignores stun; fails while cuffed and while crit | table | [ ] |
-| IGN-5 | `UnconsciousIsForgivenOnlyByName`: for every mask without `Unconscious`, `GetBlocked(Effective(Unconscious, m)) == GetBlocked(Expand(Unconscious))` | table | [ ] |
+| IGN-5 | `IgnoringDerivedBit`: `Effective(Restrained, HandsBlocked)` still blocks `Interact` | table | [x] |
+| IGN-5 | `IgnoringStunKeepsCuffsAndCrit`: needs a hand, ignores stun; fails while cuffed and while crit | table | [x] |
+| IGN-5 | `UnconsciousIsForgivenOnlyByName`: for every mask without `Unconscious`, `GetBlocked(Effective(Unconscious, m)) == GetBlocked(Expand(Unconscious))` | table | [x] |
 | IGN-5 | `CritBuckledMayLieDownIgnoringPostureLock`: `Unconscious \| PostureLocked` with `Ignoring = PostureLocked` doesn't block `Down` | table | [ ] |
 | IGN-9, REQ-4 | `MasksUseValidBits` | prototype | [ ] |
 | CAP-5 | `ProfilesUseEligibleBits` | prototype | [ ] |
@@ -451,8 +452,9 @@ Pure-table tests are plain NUnit tests against the static functions, in
 | RSN-5 | `MimeReasonComesFromEffect` | integration | [x] |
 | RSN-7, SPK-5 | `DeadMimeNoPopup`: needs the client's popup labels | integration | [ ] |
 | RSN-7, CON-4 | `UnconsciousActivateNoPopup` | integration | [ ] |
-| RSN-7 | `UnconsciousLackingCapabilityHasNoReason` | integration | [ ] |
-| RSN-8 | `RuleKeepsFirstNonNullReason` | integration | [ ] |
+| CP-1, CP-2, RSN-6 | `CapabilityExplainsFirst`: a stunned mob without `Complex` is told it lacks the dexterity | integration | [x] |
+| RSN-7 | `UnconsciousGetsNoReason`: no reason for a crit mob, even for a missing capability; with `Unconscious` forgiven, the cuffs explain themselves | integration | [x] |
+| RSN-8, EVT-2 | `RuleEventsKeepTheFirstReason` | table | [x] |
 | CON-1 | `SelfUncuff` | integration | [x] |
 | CON-6 | `UnconsciousSelfUncuffNoPopup` | integration | [ ] |
 | CON-3 | `ProgrammaticPickupNoPopup` | integration | [ ] |
@@ -467,7 +469,7 @@ Pure-table tests are plain NUnit tests against the static functions, in
 | SPK-4 | `GaspWhileCrit` | integration | [ ] |
 | CAP-1 | `ComplexIsACreatureProperty`; update it for profiles | integration | [x]; [ ] profiles |
 | CAP-1, CAP-2 | `CapabilityFormula`: profile differences, revoke beats grant | table | [ ] |
-| EV-2 | `ChangedEventsOnClientState` | integration | [ ] |
+| EV-2 | `ChangedEventsOnClientState` | integration | [x] |
 | RL-1 | `StationAiDoesNotUncancel`, until EVT-2 lands; after that the type enforces it and no test is needed | integration | [ ] |
 | RF-8, Q18 | `VehicleReentrancy`: stunning an operator stops the vehicle in the same tick. Needed while the vehicle's `UpdateCanMoveEvent` handler runs inside RF-6. | integration | [ ] |
 | MOV-1, MOV-2 | `MoverWithoutComponentStillChecksBody`: a mover without the bookkeeper's component can't move with a static body, and can once it changes | integration | [ ] |
