@@ -54,7 +54,7 @@ public sealed class MobConditionTest : InteractionTest
   - type: Speech
   - type: Cuffable
   - type: MobState
-  - type: MobConditions
+  - type: MobCapabilities
 
 - type: entity
   id: MobConditionTestCuffs
@@ -478,8 +478,8 @@ public sealed class MobConditionTest : InteractionTest
         await Stun(true);
         await RunTicks(5);
 
-        var sComp = SComp<MobConditionsComponent>(SPlayer);
-        var cComp = CComp<MobConditionsComponent>(CPlayer);
+        var sComp = SComp<MobCapabilitiesComponent>(SPlayer);
+        var cComp = CComp<MobCapabilitiesComponent>(CPlayer);
 
         await Client.WaitAssertion(() =>
         {

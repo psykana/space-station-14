@@ -17,7 +17,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     [Dependency] private IGameTiming _timing = default!;
     [Dependency] private INetManager _net = default!;
 
-    [Dependency] private EntityQuery<MobConditionsComponent> _query = default!;
+    [Dependency] private EntityQuery<MobCapabilitiesComponent> _query = default!;
 
     /// <summary>
     /// The conditions a producer may declare, in the order failure reasons are picked.
@@ -171,10 +171,10 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// before anything else can observe the change.
     /// </summary>
     /// <remarks>
-    /// An entity without <see cref="MobConditionsComponent"/> gets one the first time a producer declares something
+    /// An entity without <see cref="MobCapabilitiesComponent"/> gets one the first time a producer declares something
     /// on it, so producers never need to add it themselves. Mobs normally have it from their prototype.
     /// </remarks>
-    public void Refresh(Entity<MobConditionsComponent?> ent)
+    public void Refresh(Entity<MobCapabilitiesComponent?> ent)
     {
         // Declared arrives with the server state.
         if (_timing.ApplyingState || TerminatingOrDeleted(ent))
@@ -187,7 +187,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
         {
             // The component's startup refreshes again and commits.
             if (declared != MobCondition.None)
-                AddComp<MobConditionsComponent>(ent);
+                AddComp<MobCapabilitiesComponent>(ent);
 
             return;
         }
@@ -217,7 +217,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// <summary>
     /// Whether the mob has any of <paramref name="condition"/>, after the cascade.
     /// </summary>
-    public bool HasCondition(Entity<MobConditionsComponent?> ent, MobCondition condition)
+    public bool HasCondition(Entity<MobCapabilitiesComponent?> ent, MobCondition condition)
     {
         return _query.Resolve(ent, ref ent.Comp, false) && (ent.Comp.Conditions & condition) != 0;
     }
@@ -225,7 +225,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// <summary>
     /// Whether any of <paramref name="required"/> is blocked for this mob.
     /// </summary>
-    public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobCapability required)
+    public bool IsBlocked(Entity<MobCapabilitiesComponent?> ent, MobCapability required)
     {
         if (!_query.Resolve(ent, ref ent.Comp, false))
             return false;
@@ -237,7 +237,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// <summary>
     /// Whether any of <paramref name="required"/> is blocked for this mob, forgiving <paramref name="ignoring"/>.
     /// </summary>
-    public bool IsBlocked(Entity<MobConditionsComponent?> ent, MobCapability required, MobCondition ignoring)
+    public bool IsBlocked(Entity<MobCapabilitiesComponent?> ent, MobCapability required, MobCondition ignoring)
     {
         if (ignoring == MobCondition.None)
             return IsBlocked(ent, required);
@@ -253,7 +253,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// Every declared condition that blocks <paramref name="required"/> on its own, once <paramref name="ignoring"/>
     /// is forgiven.
     /// </summary>
-    public MobCondition GetBlockingConditions(Entity<MobConditionsComponent?> ent,
+    public MobCondition GetBlockingConditions(Entity<MobCapabilitiesComponent?> ent,
         MobCapability required,
         MobCondition ignoring = MobCondition.None)
     {
@@ -266,7 +266,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// <summary>
     /// Gets a localized "you can't do that while ..." message for why <paramref name="required"/> is blocked.
     /// </summary>
-    public bool TryGetBlockedReason(Entity<MobConditionsComponent?> ent,
+    public bool TryGetBlockedReason(Entity<MobCapabilitiesComponent?> ent,
         MobCapability required,
         out string reason,
         MobCondition ignoring = MobCondition.None)
@@ -293,13 +293,13 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     #region Lifecycle
 
     [SubscribeLocalEvent]
-    private void OnStartup(Entity<MobConditionsComponent> ent, ref ComponentStartup args)
+    private void OnStartup(Entity<MobCapabilitiesComponent> ent, ref ComponentStartup args)
     {
         Refresh((ent, ent.Comp));
     }
 
     [SubscribeLocalEvent]
-    private void OnHandleState(Entity<MobConditionsComponent> ent, ref AfterAutoHandleStateEvent args)
+    private void OnHandleState(Entity<MobCapabilitiesComponent> ent, ref AfterAutoHandleStateEvent args)
     {
         var oldBlocked = ent.Comp.Blocked;
         Derive(ent.Comp);
@@ -345,7 +345,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
         return ev.Conditions;
     }
 
-    private static void Derive(MobConditionsComponent comp)
+    private static void Derive(MobCapabilitiesComponent comp)
     {
         comp.Conditions = Expand(comp.Declared);
         comp.Blocked = GetBlocked(comp.Conditions);
@@ -355,7 +355,7 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// Asserts that the cache matches a fresh poll, to catch producers that forgot to refresh.
     /// Enabled by <see cref="CCVars.MobConditionsVerify"/>, which integration tests turn on.
     /// </summary>
-    private void Verify(Entity<MobConditionsComponent> ent)
+    private void Verify(Entity<MobCapabilitiesComponent> ent)
     {
         // A deleting entity's producers shut down one by one, so its cache is legitimately behind.
         if (!_verify || !_net.IsServer || _timing.ApplyingState || _polling.Contains(ent) || TerminatingOrDeleted(ent))

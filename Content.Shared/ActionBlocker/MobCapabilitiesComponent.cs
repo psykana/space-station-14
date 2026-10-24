@@ -8,7 +8,7 @@ namespace Content.Shared.ActionBlocker;
 /// </summary>
 [RegisterComponent, NetworkedComponent, AutoGenerateComponentState(true)]
 [Access(typeof(MobCapabilitiesSystem))]
-public sealed partial class MobConditionsComponent : Component
+public sealed partial class MobCapabilitiesComponent : Component
 {
     /// <summary>
     /// Union of everything producers declared on the last refresh, before the cascade.
@@ -47,7 +47,7 @@ public record struct RefreshMobConditionsEvent
 /// <summary>
 /// Raised on a mob, and broadcast, after its cascaded conditions changed, once the new state has been committed.
 /// Subscribe directed on your own component, or to the broadcast. Don't subscribe directed on
-/// <see cref="MobConditionsComponent"/>: only one system may hold that subscription.
+/// <see cref="MobCapabilitiesComponent"/>: only one system may hold that subscription.
 /// </summary>
 [ByRefEvent]
 public readonly record struct MobConditionsChangedEvent(EntityUid Uid, MobCondition Old, MobCondition New)
