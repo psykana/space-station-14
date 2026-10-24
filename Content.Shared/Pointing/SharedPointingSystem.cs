@@ -1,10 +1,13 @@
+using Content.Shared.ActionBlocker;
 using Robust.Shared.Serialization;
 using System.Numerics;
 
 namespace Content.Shared.Pointing;
 
-public abstract class SharedPointingSystem : EntitySystem
+public abstract partial class SharedPointingSystem : EntitySystem
 {
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
+
     protected readonly TimeSpan PointDuration = TimeSpan.FromSeconds(4);
     protected readonly float PointKeyTimeMove = 0.1f;
     protected readonly float PointKeyTimeHover = 0.5f;
@@ -18,10 +21,7 @@ public abstract class SharedPointingSystem : EntitySystem
 
     public bool CanPoint(EntityUid uid)
     {
-        var ev = new PointAttemptEvent(uid);
-        RaiseLocalEvent(uid, ev, true);
-
-        return !ev.Cancelled;
+        return _capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Point });
     }
 }
 

@@ -1,7 +1,6 @@
 using Content.Server.Chat.Systems;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Mobs;
-using Content.Shared.Speech.Muting;
-using Content.Shared.StatusEffectNew;
 
 namespace Content.Server.Mobs;
 
@@ -11,8 +10,8 @@ namespace Content.Server.Mobs;
 /// <seealso cref="DeathgaspComponent"/>
 public sealed partial class DeathgaspSystem : SharedDeathgaspSystem
 {
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private ChatSystem _chat = default!;
-    [Dependency] private StatusEffectsSystem _statusEffects = default!;
 
     [SubscribeLocalEvent]
     private void OnMobStateChanged(Entity<DeathgaspComponent> ent, ref MobStateChangedEvent args)
@@ -32,7 +31,7 @@ public sealed partial class DeathgaspSystem : SharedDeathgaspSystem
         if (!Resolve(uid, ref component, false))
             return false;
 
-        if (_statusEffects.HasEffectComp<MutedStatusEffectComponent>(uid))
+        if (_capabilities.HasCondition(uid, MobCondition.Silenced))
             return false;
 
         _chat.TryEmoteWithChat(uid, component.Prototype, ignoreActionBlocker: true);

@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Text;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Chat;
 using Content.Shared.Ghost.Components;
 using Content.Shared.Players;
@@ -142,12 +143,23 @@ public sealed partial class ChatSystem
 
     public bool CheckIgnoreSpeechBlocker(EntityUid sender, bool ignoreBlocker)
     {
+        return CheckIgnoreSpeechBlocker(sender, ignoreBlocker, out _);
+    }
+
+    /// <summary>
+    /// Asks whether the message about to be sent skips the speech check, or forgives some conditions in it.
+    /// Raised once per message, so handlers may spend one-shot grants.
+    /// </summary>
+    public bool CheckIgnoreSpeechBlocker(EntityUid sender, bool ignoreBlocker, out MobCondition ignoring)
+    {
+        ignoring = MobCondition.None;
         if (ignoreBlocker)
             return ignoreBlocker;
 
         var ev = new CheckIgnoreSpeechBlockerEvent(sender, ignoreBlocker);
         RaiseLocalEvent(sender, ev, true);
 
+        ignoring = ev.Ignoring;
         return ev.IgnoreBlocker;
     }
 

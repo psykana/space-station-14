@@ -1,24 +1,17 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Actions.Events;
 using Content.Shared.Bed.Sleep;
 using Content.Shared.Buckle.Components;
 using Content.Shared.CombatMode.Pacification;
 using Content.Shared.Cuffs;
-using Content.Shared.Damage.ForceSay;
 using Content.Shared.Damage.Systems;
-using Content.Shared.Emoting;
 using Content.Shared.Hands;
 using Content.Shared.Interaction;
 using Content.Shared.Interaction.Events;
 using Content.Shared.Inventory.Events;
-using Content.Shared.Item;
 using Content.Shared.Mobs.Components;
-using Content.Shared.Movement.Events;
-using Content.Shared.Pointing;
-using Content.Shared.Pulling.Events;
-using Content.Shared.Speech;
 using Content.Shared.Standing;
 using Content.Shared.Strip.Components;
-using Content.Shared.Throwing;
 using Content.Shared.Tools.Systems;
 using System.Linq;
 using Content.Shared.Popups;
@@ -27,20 +20,14 @@ namespace Content.Shared.Mobs.Systems;
 
 public partial class MobStateSystem
 {
-    //General purpose event subscriptions. If you can avoid it register these events inside their own systems
-    private void SubscribeEvents()
+    /// <summary>
+    /// Critical and dead mobs are unconscious; <see cref="MobCapabilitiesSystem"/> derives everything that blocks.
+    /// </summary>
+    [SubscribeLocalEvent]
+    private void OnRefreshConditions(Entity<MobStateComponent> ent, ref RefreshMobConditionsEvent args)
     {
-        SubscribeLocalEvent<MobStateComponent, ChangeDirectionAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, UseAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, AttackAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, ThrowAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, EmoteAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, DropAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, PickupAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, StartPullAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, UpdateCanMoveEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, StandAttemptEvent>(CheckAct);
-        SubscribeLocalEvent<MobStateComponent, PointAttemptEvent>(CheckAct);
+        if (ent.Comp.CurrentState is MobState.Critical or MobState.Dead)
+            args.Add(MobCondition.Unconscious);
     }
 
     [SubscribeLocalEvent]
@@ -57,18 +44,6 @@ public partial class MobStateSystem
         _standing.Down(target);
         var ev = new DropHandItemsEvent();
         RaiseLocalEvent(target, ref ev);
-    }
-
-    [SubscribeLocalEvent]
-    private void CheckConcious(Entity<MobStateComponent> ent, ref ConsciousAttemptEvent args)
-    {
-        switch (ent.Comp.CurrentState)
-        {
-            case MobState.Dead:
-            case MobState.Critical:
-                args.Cancelled = true;
-                break;
-        }
     }
 
     private void OnStateExitSubscribers(EntityUid target, MobStateComponent component, MobState state)
@@ -100,7 +75,8 @@ public partial class MobStateSystem
         if (_timing.ApplyingState)
             return;
 
-        _blocker.UpdateCanMove(target); //update movement anytime a state changes
+        // Commit the new conditions before anything below (standing, dropping) asks what the mob can do.
+        _capabilities.Refresh(target);
         switch (state)
         {
             case MobState.Alive:
@@ -160,18 +136,6 @@ public partial class MobStateSystem
             args.Multiplier /= 3;
         else if (IsCritical(target, component))
             args.Multiplier /= 2;
-    }
-
-    [SubscribeLocalEvent]
-    private void OnSpeakAttempt(EntityUid uid, MobStateComponent component, SpeakAttemptEvent args)
-    {
-        if (HasComp<AllowNextCritSpeechComponent>(uid))
-        {
-            RemCompDeferred<AllowNextCritSpeechComponent>(uid);
-            return;
-        }
-
-        CheckAct(uid, component, args);
     }
 
     private void CheckAct(EntityUid target, MobStateComponent component, CancellableEntityEventArgs args)

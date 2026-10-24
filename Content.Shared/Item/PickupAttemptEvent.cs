@@ -13,6 +13,7 @@ public sealed class PickupAttemptEvent : BasePickupAttemptEvent
 /// Raised directed at entity being picked up when someone tries to pick it up.
 /// IMPORTANT: Attempt event subscriptions should not be doing any state changes like throwing items, opening UIs, playing sounds etc!
 /// </summary>
+[Obsolete("Subscribe to MobActionTargetAttemptEvent and check for MobCapability.Pickup. This event will be removed in a future release.")]
 public sealed class GettingPickedUpAttemptEvent : BasePickupAttemptEvent
 {
     public GettingPickedUpAttemptEvent(EntityUid user, EntityUid item, bool showPopup) : base(user, item, showPopup) { }

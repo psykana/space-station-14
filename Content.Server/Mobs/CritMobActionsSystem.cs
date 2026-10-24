@@ -1,12 +1,11 @@
 using Content.Server.Administration;
 using Content.Server.Chat.Systems;
 using Content.Server.Popups;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Chat;
 using Content.Shared.Mobs;
 using Content.Shared.Mobs.Components;
 using Content.Shared.Mobs.Systems;
-using Content.Shared.Speech.Muting;
-using Content.Shared.StatusEffectNew;
 using Robust.Server.Console;
 using Robust.Shared.Player;
 
@@ -17,13 +16,13 @@ namespace Content.Server.Mobs;
 /// </summary>
 public sealed partial class CritMobActionsSystem : EntitySystem
 {
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private ChatSystem _chat = default!;
     [Dependency] private DeathgaspSystem _deathgasp = default!;
     [Dependency] private IServerConsoleHost _host = default!;
     [Dependency] private MobStateSystem _mobState = default!;
     [Dependency] private PopupSystem _popupSystem = default!;
     [Dependency] private QuickDialogSystem _quickDialog = default!;
-    [Dependency] private StatusEffectsSystem _statusEffects = default!;
 
     private const int MaxLastWordsLength = 30;
 
@@ -50,7 +49,7 @@ public sealed partial class CritMobActionsSystem : EntitySystem
         if (!_mobState.IsCritical(uid))
             return;
 
-        if (_statusEffects.HasEffectComp<MutedStatusEffectComponent>(uid))
+        if (_capabilities.HasCondition(uid, MobCondition.Silenced))
         {
             _popupSystem.PopupEntity(Loc.GetString("fake-death-muted"), uid, uid);
             return;
@@ -71,7 +70,6 @@ public sealed partial class CritMobActionsSystem : EntitySystem
                 if (Deleted(uid))
                     return;
 
-                // Intentionally does not check for muteness
                 if (actor.PlayerSession.AttachedEntity != uid
                     || !_mobState.IsCritical(uid))
                     return;
@@ -82,7 +80,8 @@ public sealed partial class CritMobActionsSystem : EntitySystem
                 }
                 lastWords += "...";
 
-                _chat.TrySendInGameICMessage(uid, lastWords, InGameICChatType.Whisper, ChatTransmitRange.Normal, checkRadioPrefix: false, ignoreActionBlocker: true);
+                // Forgives being crit, and intentionally being muted too. Anything else that stops speech still does.
+                _chat.TrySendInGameICMessage(uid, lastWords, InGameICChatType.Whisper, ChatTransmitRange.Normal, checkRadioPrefix: false, ignoring: MobCondition.Unconscious | MobCondition.Silenced);
                 _host.ExecuteCommand(actor.PlayerSession, "ghost");
             });
 

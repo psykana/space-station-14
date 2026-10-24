@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using System.Diagnostics.CodeAnalysis;
 using Content.Shared.Hands;
 using Content.Shared.Hands.EntitySystems;
@@ -41,7 +42,7 @@ public abstract partial class SharedVirtualItemSystem : EntitySystem
         SubscribeLocalEvent<VirtualItemComponent, BeingUnequippedAttemptEvent>(OnBeingUnequippedAttempt);
 
         SubscribeLocalEvent<VirtualItemComponent, BeforeRangedInteractEvent>(OnBeforeRangedInteract);
-        SubscribeLocalEvent<VirtualItemComponent, GettingInteractedWithAttemptEvent>(OnGettingInteractedWithAttemptEvent);
+        SubscribeLocalEvent<VirtualItemComponent, MobActionTargetAttemptEvent>(OnTargetAttempt);
 
         SubscribeLocalEvent<VirtualItemComponent, GetUsedEntityEvent>(OnGetUsedEntity);
     }
@@ -73,10 +74,11 @@ public abstract partial class SharedVirtualItemSystem : EntitySystem
         args.Handled = true;
     }
 
-    private void OnGettingInteractedWithAttemptEvent(Entity<VirtualItemComponent> ent, ref GettingInteractedWithAttemptEvent args)
+    private void OnTargetAttempt(Entity<VirtualItemComponent> ent, ref MobActionTargetAttemptEvent args)
     {
         // No interactions with a virtual item, please.
-        args.Cancelled = true;
+        if ((args.Required & MobCapability.Interact) != 0)
+            args.Cancel();
     }
 
     private void OnGetUsedEntity(Entity<VirtualItemComponent> ent, ref GetUsedEntityEvent args)

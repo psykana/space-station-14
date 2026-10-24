@@ -76,6 +76,7 @@
   - type: Stamina
   - type: StunVisuals
   - type: MobState
+  - type: MobCapabilities
   - type: MobThresholds
     thresholds:
       0: Alive

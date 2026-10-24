@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Actions;
 using Content.Shared.Damage.Systems;
 using Content.Shared.DoAfter;
@@ -144,23 +145,23 @@ public sealed partial class GuardianSystem : EntitySystem
 
     [SubscribeLocalEvent]
     private void OnPilotAttackAttempt(Entity<GuardianHostComponent> ent,
-        ref MechPilotRelayedEvent<GettingAttackedAttemptEvent> args)
+        ref MechPilotRelayedEvent<MobActionTargetAttemptEvent> args)
     {
-        if (args.Args.Cancelled || args.Args.Attacker != ent.Comp.HostedGuardian)
+        if (args.Args.Cancelled || args.Args.User != ent.Comp.HostedGuardian)
             return;
 
-        if (_guardianQuery.TryComp(args.Args.Attacker, out var guardian))
+        if (_guardianQuery.TryComp(args.Args.User, out var guardian))
         {
             if (_timing.CurTime >= guardian.LastAttackPopupTime + guardian.AttackPopupDelay)
             {
                 _popup.PopupCursor(Loc.GetString("guardian-attack-host"),
-                    args.Args.Attacker,
+                    args.Args.User,
                     PopupType.LargeCaution);
             }
             guardian.LastAttackPopupTime = _timing.CurTime;
         }
 
-        args.Args.Cancelled = true;
+        args.Args.Cancel();
     }
 
     [SubscribeLocalEvent]

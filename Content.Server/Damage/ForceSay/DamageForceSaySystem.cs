@@ -1,4 +1,6 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Bed.Sleep;
+using Content.Shared.Chat;
 using Content.Shared.Damage.Events;
 using Content.Shared.Damage.ForceSay;
 using Content.Shared.Damage.Systems;
@@ -31,6 +33,18 @@ public sealed partial class DamageForceSaySystem : EntitySystem
         // (this won't double raise, because of the cooldown)
         SubscribeLocalEvent<DamageForceSayComponent, DamageChangedEvent>(OnDamageChanged, after: new []{ typeof(MobThresholdSystem)} );
         SubscribeLocalEvent<DamageForceSayComponent, SleepStateChangedEvent>(OnSleep);
+
+        SubscribeLocalEvent<AllowNextCritSpeechComponent, CheckIgnoreSpeechBlockerEvent>(OnCheckIgnoreSpeech);
+    }
+
+    /// <summary>
+    /// The force-said line arrives as an ordinary chat message, so the grant forgives unconsciousness for whichever
+    /// message is sent next, then is spent.
+    /// </summary>
+    private void OnCheckIgnoreSpeech(EntityUid uid, AllowNextCritSpeechComponent component, CheckIgnoreSpeechBlockerEvent args)
+    {
+        args.Ignoring |= MobCondition.Unconscious;
+        RemCompDeferred<AllowNextCritSpeechComponent>(uid);
     }
 
     public override void Update(float frameTime)

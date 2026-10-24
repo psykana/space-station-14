@@ -1,0 +1,129 @@
+using Robust.Shared.Serialization;
+
+namespace Content.Shared.ActionBlocker;
+
+/// <summary>
+/// A closed vocabulary of things that can be wrong with a mob. Producers declare these during
+/// <see cref="RefreshMobConditionsEvent"/>; <see cref="MobCapabilitiesSystem"/> cascades them and maps them to
+/// blocked <see cref="MobCapability"/>s. A member must not be added unless something declares or derives it.
+/// </summary>
+[Flags, Serializable, NetSerializable]
+public enum MobCondition : ushort
+{
+    None = 0,
+
+    /// <summary>
+    /// The mind is unavailable: asleep, critical, dead.
+    /// </summary>
+    Unconscious = 1 << 0,
+
+    /// <summary>
+    /// Generally unable to act. No specific cause is implied.
+    /// </summary>
+    Incapacitated = 1 << 1,
+
+    /// <summary>
+    /// Bound but awake. Blocks nothing directly; acts through <see cref="HandsBlocked"/>.
+    /// Exists so that a call site can forgive restraint specifically.
+    /// </summary>
+    Restrained = 1 << 2,
+
+    /// <summary>
+    /// Cannot use manipulators.
+    /// </summary>
+    HandsBlocked = 1 << 3,
+
+    /// <summary>
+    /// Cannot move voluntarily.
+    /// </summary>
+    Immobilized = 1 << 4,
+
+    /// <summary>
+    /// Cannot be upright.
+    /// </summary>
+    Floored = 1 << 5,
+
+    /// <summary>
+    /// Cannot pull. Only derived by the cascade.
+    /// </summary>
+    PullBlocked = 1 << 6,
+
+    /// <summary>
+    /// No physical presence, like a spectating ghost.
+    /// </summary>
+    Incorporeal = 1 << 7,
+
+    /// <summary>
+    /// Cannot speak: muted, a mime's vow, a puppet nobody holds.
+    /// </summary>
+    Silenced = 1 << 8,
+}
+
+/// <summary>
+/// Things a mob can do. A requirement is a mask of them: a caller asks for every capability its act needs.
+/// Conditions block most members; <see cref="Complex"/> is a creature property instead. Each member names the legacy
+/// attempt event <see cref="MobCapabilitiesSystem"/> still raises for it.
+/// </summary>
+[Flags, Serializable, NetSerializable]
+public enum MobCapability : uint
+{
+    None = 0,
+
+    /// <summary><see cref="Content.Shared.Interaction.Events.InteractionAttemptEvent"/></summary>
+    Interact = 1 << 0,
+
+    /// <summary><see cref="Content.Shared.Interaction.Events.ConsciousAttemptEvent"/></summary>
+    Conscious = 1 << 1,
+
+    /// <summary><see cref="Content.Shared.Interaction.Events.UseAttemptEvent"/></summary>
+    UseHeld = 1 << 2,
+
+    /// <summary><see cref="Content.Shared.Item.PickupAttemptEvent"/></summary>
+    Pickup = 1 << 3,
+
+    /// <summary><see cref="Content.Shared.Hands.DropAttemptEvent"/></summary>
+    Drop = 1 << 4,
+
+    /// <summary><see cref="Content.Shared.Interaction.Events.AttackAttemptEvent"/></summary>
+    Attack = 1 << 5,
+
+    /// <summary><see cref="Content.Shared.Throwing.ThrowAttemptEvent"/></summary>
+    Throw = 1 << 6,
+
+    /// <summary><see cref="Content.Shared.Speech.SpeakAttemptEvent"/></summary>
+    Speak = 1 << 7,
+
+    /// <summary><see cref="Content.Shared.Emoting.EmoteAttemptEvent"/></summary>
+    Emote = 1 << 8,
+
+    /// <summary><see cref="Content.Shared.Pointing.PointAttemptEvent"/></summary>
+    Point = 1 << 9,
+
+    /// <summary><see cref="Content.Shared.Movement.Events.UpdateCanMoveEvent"/></summary>
+    Move = 1 << 10,
+
+    /// <summary><see cref="Content.Shared.Standing.StandAttemptEvent"/>: may this entity be upright at all.</summary>
+    Stand = 1 << 11,
+
+    /// <summary><see cref="Content.Shared.Pulling.Events.StartPullAttemptEvent"/></summary>
+    Pull = 1 << 12,
+
+    /// <summary><see cref="Content.Shared.Interaction.Events.ChangeDirectionAttemptEvent"/></summary>
+    ChangeDirection = 1 << 13,
+
+    /// <summary><see cref="Content.Shared.Stunnable.StandUpAttemptEvent"/>: may it try to rise.</summary>
+    StandUp = 1 << 14,
+
+    /// <summary>
+    /// <see cref="Content.Shared.Standing.DownAttemptEvent"/>: may it lie down. Nothing unconscious blocks this;
+    /// crit and death lie the mob down.
+    /// </summary>
+    Down = 1 << 15,
+
+    /// <summary>
+    /// Has the hands and wits for complex interactions, through
+    /// <see cref="Content.Shared.Interaction.Components.ComplexInteractionComponent"/>. A creature property: no condition
+    /// blocks it, and there is no attempt event.
+    /// </summary>
+    Complex = 1 << 16,
+}

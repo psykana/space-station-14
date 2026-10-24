@@ -9,7 +9,7 @@ namespace Content.Shared.Speech.Muting;
 public sealed partial class MutedStatusEffectComponent : Component
 {
     /// <summary>
-    /// Popup shown when speech is blocked.
+    /// Why the mob can't speak, shown when its speech is blocked by this effect.
     /// </summary>
     [DataField, AutoNetworkedField]
     public LocId SpeakPopup = "speech-muted";

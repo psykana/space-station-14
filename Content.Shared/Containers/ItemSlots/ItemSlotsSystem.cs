@@ -20,6 +20,7 @@ public sealed partial class ItemSlotsSystem : EntitySystem
 {
     [Dependency] private ISharedAdminLogManager _adminLogger = default!;
     [Dependency] private ActionBlockerSystem _actionBlockerSystem = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
     [Dependency] private SharedContainerSystem _containers = default!;
     [Dependency] private SharedPopupSystem _popupSystem = default!;
     [Dependency] private SharedHandsSystem _handsSystem = default!;

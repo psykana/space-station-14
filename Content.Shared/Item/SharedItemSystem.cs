@@ -132,7 +132,8 @@ public abstract partial class SharedItemSystem : EntitySystem
         if (args.Handled)
             return;
 
-        args.Handled = _handsSystem.TryPickup(args.User, uid, null, animateUser: false);
+        // The player clicked the item, so tell them why it didn't work (CON-3).
+        args.Handled = _handsSystem.TryPickup(args.User, uid, null, animateUser: false, showPopup: true);
     }
 
     private void AddPickupVerb(EntityUid uid, ItemComponent component, GetVerbsEvent<InteractionVerb> args)

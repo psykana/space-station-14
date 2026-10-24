@@ -1,4 +1,5 @@
 using System.Linq;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Chat;
 using Content.Shared.Database;
 using Content.Shared.IdentityManagement;
@@ -12,16 +13,33 @@ namespace Content.Server.Chat.Systems;
 
 public sealed partial class ChatSystem
 {
+    private bool CanSpeak(EntityUid source, bool ignoreActionBlocker, MobCondition ignoring)
+    {
+        if (ignoreActionBlocker)
+            return true;
+
+        var req = new InteractionRequirements { Required = MobCapability.Speak, Ignoring = ignoring };
+        if (_capabilities.CanPerform(source, req, null, null, out var reason))
+            return true;
+
+        // The bookkeeper gives no reason to an unconscious mind, like a dead mime typing.
+        if (reason != null)
+            _popup.PopupEntity(reason, source, source);
+
+        return false;
+    }
+
     private void SendEntitySpeak(
         EntityUid source,
         string originalMessage,
         ChatTransmitRange range,
         string? nameOverride,
         bool hideLog = false,
-        bool ignoreActionBlocker = false
+        bool ignoreActionBlocker = false,
+        MobCondition ignoring = MobCondition.None
         )
     {
-        if (!_actionBlocker.CanSpeak(source) && !ignoreActionBlocker)
+        if (!CanSpeak(source, ignoreActionBlocker, ignoring))
             return;
 
         var message = TransformSpeech(source, originalMessage);
@@ -91,10 +109,11 @@ public sealed partial class ChatSystem
         RadioChannelPrototype? channel,
         string? nameOverride,
         bool hideLog = false,
-        bool ignoreActionBlocker = false
+        bool ignoreActionBlocker = false,
+        MobCondition ignoring = MobCondition.None
         )
     {
-        if (!_actionBlocker.CanSpeak(source) && !ignoreActionBlocker)
+        if (!CanSpeak(source, ignoreActionBlocker, ignoring))
             return;
 
         var message = TransformSpeech(source, FormattedMessage.RemoveMarkupOrThrow(originalMessage));
