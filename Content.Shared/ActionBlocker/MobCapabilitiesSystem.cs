@@ -219,7 +219,11 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     /// </summary>
     public bool HasCondition(Entity<MobCapabilitiesComponent?> ent, MobCondition condition)
     {
-        return _query.Resolve(ent, ref ent.Comp, false) && (ent.Comp.Conditions & condition) != 0;
+        if (!_query.Resolve(ent, ref ent.Comp, false))
+            return false;
+
+        Verify((ent, ent.Comp));
+        return (ent.Comp.Conditions & condition) != 0;
     }
 
     /// <summary>
@@ -301,12 +305,21 @@ public sealed partial class MobCapabilitiesSystem : EntitySystem
     [SubscribeLocalEvent]
     private void OnHandleState(Entity<MobCapabilitiesComponent> ent, ref AfterAutoHandleStateEvent args)
     {
+        var oldConditions = ent.Comp.Conditions;
         var oldBlocked = ent.Comp.Blocked;
         Derive(ent.Comp);
 
         // Producers may have recomputed CanMove earlier in this state application, against the stale cache.
         if (((oldBlocked ^ ent.Comp.Blocked) & MobCapability.Move) != 0)
             UpdateCanMove(ent);
+
+        // Client consumers hear about server-driven changes too. Their handlers run while applying state, so a
+        // Refresh from them does nothing (EV-2).
+        if (oldConditions != ent.Comp.Conditions)
+        {
+            var ev = new MobConditionsChangedEvent(ent, oldConditions, ent.Comp.Conditions);
+            RaiseLocalEvent(ent, ref ev, true);
+        }
     }
 
     #endregion

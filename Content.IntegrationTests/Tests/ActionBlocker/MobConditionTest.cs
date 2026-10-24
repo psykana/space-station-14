@@ -1,5 +1,6 @@
 #nullable enable
 using Content.IntegrationTests.Fixtures.Attributes;
+using Content.IntegrationTests.Tests.Helpers;
 using Content.IntegrationTests.Tests.Interaction;
 using Content.Server.Chat.Systems;
 using Content.Server.Cuffs;
@@ -537,6 +538,24 @@ public sealed class MobConditionTest : InteractionTest
         {
             Assert.That(_cCapabilities.IsBlocked(CPlayer, MobCapability.Interact), Is.True);
             Assert.That(_cCapabilities.IsBlocked(CPlayer, MobCapability.Interact, MobCondition.Restrained), Is.False);
+        });
+    }
+
+    private sealed class ConditionsChangedListenerSystem : TestListenerSystem<MobConditionsChangedEvent>;
+
+    [Test, Description("The client hears about conditions that server state changes.")]
+    public async Task ChangedEventsOnClientState()
+    {
+        await Client.WaitPost(() => CEntMan.EnsureComponent<TestListenerComponent>(CPlayer));
+
+        await Cuff();
+        await RunTicks(5);
+
+        await Client.WaitAssertion(() =>
+        {
+            var listener = CEntMan.System<ConditionsChangedListenerSystem>();
+            Assert.That(listener.Count(CPlayer, e => (e.Added & MobCondition.Restrained) != 0), Is.GreaterThan(0),
+                "The client wasn't told the cuffs restrain the player.");
         });
     }
 

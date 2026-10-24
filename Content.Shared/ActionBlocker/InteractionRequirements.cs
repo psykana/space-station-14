@@ -20,4 +20,17 @@ public partial record struct InteractionRequirements()
     /// </summary>
     [DataField]
     public MobCondition Ignoring = MobCondition.None;
+
+    // Note that default(InteractionRequirements) skips the field initializers and requires nothing (REQ-2):
+    // build requirements with new(), an initializer or one of these presets.
+
+    /// <summary>
+    /// Requires <see cref="MobCapability.Interact"/>, the common case.
+    /// </summary>
+    public static readonly InteractionRequirements Interact = new();
+
+    /// <summary>
+    /// Requires <see cref="MobCapability.Conscious"/>: the act needs a mind, not hands.
+    /// </summary>
+    public static readonly InteractionRequirements Conscious = new() { Required = MobCapability.Conscious };
 }

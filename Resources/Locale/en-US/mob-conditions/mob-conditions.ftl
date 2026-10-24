@@ -5,6 +5,7 @@ mob-condition-name-restrained = restrained
 mob-condition-name-handsblocked = unable to use your hands
 mob-condition-name-immobilized = immobilized
 mob-condition-name-floored = on the floor
+mob-condition-name-pullblocked = unable to pull
 mob-condition-name-silenced = silenced
 
 mob-condition-blocked-unconscious = You can't do that while unconscious.

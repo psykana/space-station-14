@@ -48,7 +48,7 @@ namespace Content.Shared.ActionBlocker
         /// </remarks>
         public bool CanInteract(EntityUid user, EntityUid? target)
         {
-            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.Interact }, target);
+            return _capabilities.CanPerform(user, InteractionRequirements.Interact, target);
         }
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace Content.Shared.ActionBlocker
         /// </remarks>
         public bool CanConsciouslyPerformAction(EntityUid user)
         {
-            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.Conscious });
+            return _capabilities.CanPerform(user, InteractionRequirements.Conscious);
         }
 
         public bool CanThrow(EntityUid user, EntityUid itemUid)
