@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Content.Shared.ActionBlocker;
 using Content.Shared.Database;
 
 namespace Content.Shared.Containers.ItemSlots;
@@ -75,8 +76,15 @@ public sealed partial class ItemSlotsSystem
 
         item = slot.Item;
 
-        if (user != null && item != null && !_actionBlockerSystem.CanPickup(user.Value, item.Value, showPopup: true))
+        if (user != null && item != null &&
+            !_capabilities.CanPerform(user.Value, new InteractionRequirements { Required = MobCapability.Pickup }, item.Value, null, out var reason))
+        {
+            // The player asked to eject it, so tell them why it didn't work (CON-3).
+            if (reason != null)
+                _popupSystem.PopupCursor(reason, user.Value);
+
             return false;
+        }
 
         return Eject(uid, slot, item!.Value, user, excludeUserAudio);
     }

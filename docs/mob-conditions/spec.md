@@ -721,9 +721,10 @@ public sealed partial class MobCapabilityProfilePrototype : IPrototype
   `CanPickupToHand(…, showPopup)` shows the reason when asked.
 - **CON-4.** The activate key shows the `CanPerform` reason when an activation fails (in
   `SharedInteractionSystem.HandleActivateItemInWorld`). It is interaction feedback.
-- **CON-5. One popup.** A consumer in shared code shows the reason with `PopupPredicted`, so the
-  player sees it once. `PopupClient` is only for paths the client always predicts. A server-only consumer, such as
-  chat, uses `PopupEntity`.
+- **CON-5. One popup, to the user only.** A consumer shows the reason with
+  `PopupEntity(reason, uid, user)` or `PopupCursor(reason, user)`. Popups from shared code are
+  predicted automatically, so the player sees each once. `PopupClient` and `PopupPredicted` are
+  obsolete, and `PopupPredicted` would show the reason to everyone nearby.
 - **CON-6. No reason, no popup.** When the reason is null, a consumer shows nothing. It MUST NOT
   substitute text of its own, which would break RSN-7.
 

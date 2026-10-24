@@ -7,6 +7,7 @@ using Content.Shared.Hands.Components;
 using Content.Shared.Interaction;
 using Content.Shared.Inventory;
 using Content.Shared.Inventory.VirtualItem;
+using Content.Shared.Popups;
 using Content.Shared.Storage.EntitySystems;
 using Content.Shared.Whitelist;
 using Robust.Shared.Containers;
@@ -20,6 +21,8 @@ public abstract partial class SharedHandsSystem
 {
     [Dependency] private ISharedAdminLogManager _adminLogger = default!;
     [Dependency] private ActionBlockerSystem _actionBlocker = default!;
+    [Dependency] private MobCapabilitiesSystem _capabilities = default!;
+    [Dependency] private SharedPopupSystem _popup = default!;
     [Dependency] protected SharedContainerSystem ContainerSystem = default!;
     [Dependency] private SharedInteractionSystem _interactionSystem = default!;
     [Dependency] private InventorySystem _inventory = default!;

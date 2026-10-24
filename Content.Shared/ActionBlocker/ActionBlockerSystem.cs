@@ -98,7 +98,8 @@ namespace Content.Shared.ActionBlocker
         /// <param name="showPopup">Whether or not to show a popup to the player telling them why the attempt failed.</param>
         public bool CanPickup(EntityUid user, EntityUid item, bool showPopup = false)
         {
-            return _capabilities.CanPickup(user, item, showPopup);
+            // The bookkeeper never shows popups; the caller shows the reason (CON-2).
+            return _capabilities.CanPerform(user, new InteractionRequirements { Required = MobCapability.Pickup }, item);
         }
 
         public bool CanEmote(EntityUid uid)

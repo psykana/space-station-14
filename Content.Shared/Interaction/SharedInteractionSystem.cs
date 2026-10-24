@@ -1140,7 +1140,7 @@ namespace Content.Shared.Interaction
                 reason != null)
             {
                 // Tell the player why nothing happened, if whatever blocked them said.
-                _popupSystem.PopupClient(reason, uid, user.Value);
+                _popupSystem.PopupEntity(reason, uid, user.Value);
             }
 
             return false;

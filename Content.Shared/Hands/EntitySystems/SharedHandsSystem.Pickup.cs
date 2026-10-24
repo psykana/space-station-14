@@ -1,3 +1,4 @@
+using Content.Shared.ActionBlocker;
 using Content.Shared.Database;
 using Content.Shared.Hands.Components;
 using Content.Shared.Item;
@@ -48,7 +49,8 @@ public abstract partial class SharedHandsSystem
         bool animateUser = false,
         bool animate = true,
         HandsComponent? handsComp = null,
-        ItemComponent? item = null)
+        ItemComponent? item = null,
+        bool showPopup = false)
     {
         if (!Resolve(uid, ref handsComp, false))
             return false;
@@ -56,12 +58,14 @@ public abstract partial class SharedHandsSystem
         if (!TryGetEmptyHand((uid, handsComp), out var hand))
             return false;
 
-        return TryPickup(uid, entity, hand, checkActionBlocker, animateUser, animate, handsComp, item);
+        return TryPickup(uid, entity, hand, checkActionBlocker, animateUser, animate, handsComp, item, showPopup);
     }
 
     /// <summary>
     ///     Tries to pick up an entity to a specific hand. If no explicit hand is specified, defaults to using the currently active hand.
     /// </summary>
+    /// <param name="showPopup">Whether to tell the user why the pickup was blocked. Only paths a player initiated
+    /// pass true; code acting on its own shows nothing.</param>
     public bool TryPickup(
         EntityUid uid,
         EntityUid entity,
@@ -70,7 +74,8 @@ public abstract partial class SharedHandsSystem
         bool animateUser = false,
         bool animate = true,
         HandsComponent? handsComp = null,
-        ItemComponent? item = null)
+        ItemComponent? item = null,
+        bool showPopup = false)
     {
         if (!Resolve(uid, ref handsComp, false))
             return false;
@@ -87,7 +92,7 @@ public abstract partial class SharedHandsSystem
         if (!Resolve(entity, ref item, false))
             return false;
 
-        if (!CanPickupToHand(uid, entity, handId, checkActionBlocker: checkActionBlocker, showPopup: true, handsComp: handsComp, item: item))
+        if (!CanPickupToHand(uid, entity, handId, checkActionBlocker: checkActionBlocker, showPopup: showPopup, handsComp: handsComp, item: item))
             return false;
 
         if (!BeforeDoPickup((uid, handsComp), entity))
@@ -198,8 +203,14 @@ public abstract partial class SharedHandsSystem
         if (TryComp(entity, out PhysicsComponent? physics) && physics.BodyType == BodyType.Static)
             return false;
 
-        if (checkActionBlocker && !_actionBlocker.CanPickup(uid, entity, showPopup))
+        if (checkActionBlocker &&
+            !_capabilities.CanPerform(uid, new InteractionRequirements { Required = MobCapability.Pickup }, entity, null, out var reason))
+        {
+            if (showPopup && reason != null)
+                _popup.PopupCursor(reason, uid);
+
             return false;
+        }
 
         if (!CheckWhitelists((uid, handsComp), handId, entity))
             return false;

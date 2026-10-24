@@ -6,7 +6,6 @@ using Content.Shared.Item;
 using Content.Shared.Movement.Components;
 using Content.Shared.Movement.Events;
 using Content.Shared.Pointing;
-using Content.Shared.Popups;
 using Content.Shared.Pulling.Events;
 using Content.Shared.Speech;
 using Content.Shared.Standing;
@@ -23,7 +22,6 @@ namespace Content.Shared.ActionBlocker;
 public sealed partial class MobCapabilitiesSystem
 {
     [Dependency] private SharedContainerSystem _container = default!;
-    [Dependency] private SharedPopupSystem _popup = default!;
 
     [Dependency] private EntityQuery<ComplexInteractionComponent> _complexQuery = default!;
     [Dependency] private EntityQuery<InputMoverComponent> _moverQuery = default!;
@@ -32,7 +30,6 @@ public sealed partial class MobCapabilitiesSystem
     /// Extra context some legacy attempt events carry. Goes away with those events.
     /// </summary>
     private readonly record struct LegacyArgs(
-        bool ShowPopup = false,
         Entity<MeleeWeaponComponent>? Weapon = null,
         bool Disarm = false);
 
@@ -57,22 +54,6 @@ public sealed partial class MobCapabilitiesSystem
         out string? reason)
     {
         return Perform(user, req, target, used, default, out reason);
-    }
-
-    /// <summary>
-    /// <see cref="CanPerform(EntityUid, in InteractionRequirements, EntityUid?, EntityUid?)"/> for
-    /// <see cref="MobCapability.Pickup"/>, with the legacy popup flag.
-    /// </summary>
-    public bool CanPickup(EntityUid user, EntityUid item, bool showPopup = false)
-    {
-        var req = new InteractionRequirements { Required = MobCapability.Pickup };
-        if (Perform(user, req, item, null, new LegacyArgs(ShowPopup: showPopup), out var reason))
-            return true;
-
-        if (showPopup && reason != null)
-            _popup.PopupCursor(reason, user);
-
-        return false;
     }
 
     /// <summary>
@@ -336,12 +317,12 @@ public sealed partial class MobCapabilitiesSystem
 
         if ((required & MobCapability.Pickup) != 0 && target != null)
         {
-            var ev = new PickupAttemptEvent(user, target.Value, legacy.ShowPopup);
+            var ev = new PickupAttemptEvent(user, target.Value, false);
             RaiseLocalEvent(user, ev);
             if (ev.Cancelled)
                 return false;
 
-            var itemEv = new GettingPickedUpAttemptEvent(user, target.Value, legacy.ShowPopup);
+            var itemEv = new GettingPickedUpAttemptEvent(user, target.Value, false);
             RaiseLocalEvent(target.Value, itemEv);
             if (itemEv.Cancelled)
                 return false;
