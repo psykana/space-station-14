@@ -15,3 +15,5 @@ mob-condition-blocked-handsblocked = You can't do that without the use of your h
 mob-condition-blocked-immobilized = You can't do that while immobilized.
 mob-condition-blocked-floored = You can't do that while on the floor.
 mob-condition-blocked-silenced = You can't speak right now!
+
+mob-capability-lacking-complex = You lack the dexterity to do that.

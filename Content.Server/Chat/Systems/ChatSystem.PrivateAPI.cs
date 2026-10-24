@@ -22,8 +22,8 @@ public sealed partial class ChatSystem
         if (_capabilities.CanPerform(source, req, null, null, out var reason))
             return true;
 
-        // An unconscious mind gets no feedback, like a dead mime typing.
-        if (reason != null && !_capabilities.IsBlocked(source, MobCapability.Conscious, ignoring))
+        // The bookkeeper gives no reason to an unconscious mind, like a dead mime typing.
+        if (reason != null)
             _popup.PopupEntity(reason, source, source);
 
         return false;

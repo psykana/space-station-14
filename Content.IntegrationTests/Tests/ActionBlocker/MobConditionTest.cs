@@ -199,6 +199,45 @@ public sealed class MobConditionTest : InteractionTest
         });
     }
 
+    [Test, Description("A missing capability explains a failure before any condition does.")]
+    public async Task CapabilityExplainsFirst()
+    {
+        await Stun(true);
+
+        await Server.WaitAssertion(() =>
+        {
+            SEntMan.RemoveComponent<ComplexInteractionComponent>(SPlayer);
+
+            var req = new InteractionRequirements { Required = MobCapability.Interact | MobCapability.Complex };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, req, null, null, out var reason), Is.False);
+            Assert.That(reason, Is.EqualTo(Loc.GetString("mob-capability-lacking-complex")));
+        });
+    }
+
+    [Test, Description("An unconscious mind gets no reason, unless the mask forgives the unconsciousness.")]
+    public async Task UnconsciousGetsNoReason()
+    {
+        await Cuff();
+        await SetMobState(MobState.Critical);
+
+        await Server.WaitAssertion(() =>
+        {
+            Assert.That(_sCapabilities.CanPerform(SPlayer, new InteractionRequirements(), null, null, out var reason),
+                Is.False);
+            Assert.That(reason, Is.Null, "A crit mob was told why it can't interact.");
+
+            SEntMan.RemoveComponent<ComplexInteractionComponent>(SPlayer);
+            var complex = new InteractionRequirements { Required = MobCapability.Interact | MobCapability.Complex };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, complex, null, null, out reason), Is.False);
+            Assert.That(reason, Is.Null, "A crit mob was told it lacks a capability.");
+
+            // Forgiving the unconsciousness leaves the cuffs, which may explain themselves.
+            var forgiven = new InteractionRequirements { Ignoring = MobCondition.Unconscious };
+            Assert.That(_sCapabilities.CanPerform(SPlayer, forgiven, null, null, out reason), Is.False);
+            Assert.That(reason, Is.EqualTo(Loc.GetString("mob-condition-blocked-restrained")));
+        });
+    }
+
     [Test, Description("Two sources: reviving a cuffed mob leaves it restrained.")]
     public async Task CuffCritReviveKeepsRestraint()
     {

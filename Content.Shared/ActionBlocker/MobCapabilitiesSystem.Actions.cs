@@ -164,6 +164,32 @@ public sealed partial class MobCapabilitiesSystem
         LegacyArgs legacy,
         out string? reason)
     {
+        if (Check(user, req, target, used, legacy, out reason))
+            return true;
+
+        // An unconscious mind gets no feedback, whichever step failed (RSN-7).
+        if (reason != null && IsUnconscious(user, req.Ignoring))
+            reason = null;
+
+        return false;
+    }
+
+    private bool Check(EntityUid user,
+        in InteractionRequirements req,
+        EntityUid? target,
+        EntityUid? used,
+        LegacyArgs legacy,
+        out string? reason)
+    {
+        reason = null;
+
+        if ((req.Required & MobCapability.Move) != 0)
+        {
+            // Move is a cache: use CanMove (MOV-5).
+            Log.Error($"{nameof(CanPerform)} does not support {MobCapability.Move}.");
+            return false;
+        }
+
         if (!CheckSelf(user, req, out reason))
             return false;
 
@@ -175,11 +201,19 @@ public sealed partial class MobCapabilitiesSystem
     }
 
     /// <summary>
-    /// What the entity itself can do: its conditions, from the cache, then its creature properties.
+    /// What the entity itself can do: its capabilities, then its conditions from the cache. A missing capability is
+    /// more basic than any condition, so it explains the failure first (CP-1, CP-2).
     /// </summary>
     private bool CheckSelf(EntityUid user, in InteractionRequirements req, out string? reason)
     {
         reason = null;
+
+        var missing = req.Required & GetPropertyBlocked(user);
+        if (missing != MobCapability.None)
+        {
+            reason = GetLackingReason(missing);
+            return false;
+        }
 
         if (IsBlocked(user, req.Required, req.Ignoring))
         {
@@ -189,7 +223,25 @@ public sealed partial class MobCapabilitiesSystem
             return false;
         }
 
-        return (req.Required & GetPropertyBlocked(user)) == 0;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether the user is still unconscious once <paramref name="ignoring"/> is forgiven.
+    /// </summary>
+    private bool IsUnconscious(EntityUid user, MobCondition ignoring)
+    {
+        return _query.TryComp(user, out var comp) &&
+               (Effective(comp.Declared, ignoring) & MobCondition.Unconscious) != 0;
+    }
+
+    /// <summary>
+    /// The reason for a missing capability names its lowest missing bit (RSN-6).
+    /// </summary>
+    private string GetLackingReason(MobCapability missing)
+    {
+        var lowest = (MobCapability) ((uint) missing & (~(uint) missing + 1));
+        return Loc.GetString($"mob-capability-lacking-{lowest.ToString().ToLowerInvariant()}");
     }
 
     /// <summary>
@@ -344,13 +396,6 @@ public sealed partial class MobCapabilitiesSystem
             RaiseLocalEvent(user, ev, true);
             if (ev.Cancelled)
                 return false;
-        }
-
-        if ((required & MobCapability.Move) != 0)
-        {
-            // Move is a cache: use CanMove.
-            Log.Error($"{nameof(CanPerform)} does not support {MobCapability.Move}.");
-            return false;
         }
 
         if ((required & MobCapability.Stand) != 0)
